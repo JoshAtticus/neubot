@@ -229,6 +229,18 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // Add this function to fetch user info
+    async function getUserInfo() {
+        try {
+            const response = await fetch('/api/user');
+            const userInfo = await response.json();
+            return userInfo;
+        } catch (error) {
+            console.error('Error fetching user info:', error);
+            return { authenticated: false };
+        }
+    }
+
     // Update the search results formatting to handle rate limit errors
     function formatSearchResults(data) {
         if (data.error) {
@@ -374,6 +386,7 @@ document.addEventListener('DOMContentLoaded', function() {
             settingsModal.classList.add('open');
         }, 10); // Small delay to ensure transition works
         updateRateLimits();
+        updateUserInfo();
     });
 
     closeModalBtn.addEventListener('click', () => {
@@ -459,10 +472,49 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Update rate limits every 60 seconds if modal is open
+    // User info functionality
+    async function updateUserInfo() {
+        try {
+            const userInfo = await getUserInfo();
+            const accountLoggedIn = document.getElementById('account-logged-in');
+            const accountLoggedOut = document.getElementById('account-logged-out');
+            
+            if (userInfo.authenticated) {
+                // User is logged in
+                accountLoggedIn.style.display = 'block';
+                accountLoggedOut.style.display = 'none';
+                
+                // Update user profile
+                const userName = document.getElementById('user-name');
+                const userEmail = document.getElementById('user-email');
+                const userProvider = document.getElementById('user-provider');
+                const userAvatar = document.getElementById('user-avatar');
+                
+                userName.textContent = userInfo.user.name;
+                userEmail.textContent = userInfo.user.email;
+                userProvider.textContent = `Signed in with ${userInfo.user.provider.charAt(0).toUpperCase() + userInfo.user.provider.slice(1)}`;
+                
+                if (userInfo.user.profile_pic) {
+                    userAvatar.src = userInfo.user.profile_pic;
+                } else {
+                    // Default avatar if none provided
+                    userAvatar.src = "user-icon.svg";
+                }
+            } else {
+                // User is not logged in
+                accountLoggedIn.style.display = 'none';
+                accountLoggedOut.style.display = 'block';
+            }
+        } catch (error) {
+            console.error('Error updating user info:', error);
+        }
+    }
+
+    // Update rate limits and user info every 60 seconds if modal is open
     setInterval(() => {
         if (settingsModal.classList.contains('open')) {
             updateRateLimits();
+            updateUserInfo();
         }
     }, 60000);
 
@@ -484,14 +536,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load saved settings on page load
     loadSettings();
     
-    // Make general panel active by default instead of rate-limits
-    document.querySelectorAll('.sidebar-item').forEach(item => {
-        item.classList.remove('active');
-    });
-    document.querySelector('.sidebar-item[data-panel="general"]').classList.add('active');
-    
-    document.querySelectorAll('.panel').forEach(panel => {
-        panel.classList.remove('active');
-    });
-    document.getElementById('general-panel').classList.add('active');
+    // Fetch user info and rate limits when page loads
+    updateUserInfo();
+    updateRateLimits();
 });

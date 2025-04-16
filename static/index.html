@@ -36,7 +36,7 @@
                     </div>
                     <div class="sidebar-items">
                         <div class="sidebar-item active" data-panel="general">General</div>
-                        <div class="sidebar-item" data-panel="rate-limits">Rate Limits</div>
+                        <div class="sidebar-item" data-panel="account">Account</div>
                         <div class="sidebar-item" data-panel="about">About</div>
                     </div>
                 </div>
@@ -68,7 +68,33 @@
                         </div>
                     </div>
                     
-                    <div class="panel" id="rate-limits-panel">
+                    <div class="panel" id="account-panel">
+                        <h3>Account</h3>
+                        <div id="account-logged-out" style="display: none;">
+                            <div class="account-message">
+                                <p>Sign in to unlock higher rate limits and more features.</p>
+                                <div class="account-actions">
+                                    <a href="/login" class="login-button">Sign in</a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="account-logged-in" style="display: none;">
+                            <div class="account-info">
+                                <div class="user-profile">
+                                    <div class="user-avatar">
+                                        <img id="user-avatar" src="" alt="User avatar">
+                                    </div>
+                                    <div class="user-details">
+                                        <h4 id="user-name"></h4>
+                                        <p id="user-email"></p>
+                                        <p id="user-provider"></p>
+                                        <a href="/logout" class="logout-button">Sign out</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <h3>Rate Limits</h3>
                         <div class="reset-info">
                             <p>Your limits will reset in <span id="days-remaining">-</span> day(s). Limits do not roll over, any remaining queries at the end of the month will be discarded.</p>

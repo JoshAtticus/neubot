@@ -1,11 +1,10 @@
 import re
 import json
-import datetime
 import requests
 import sqlite3
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Any, Tuple, Set
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, redirect, url_for, session
 import threading
 import os
 import pytz
@@ -13,20 +12,35 @@ from timezonefinder import TimezoneFinder
 from geopy.geocoders import Nominatim
 from dotenv import load_dotenv
 from collections import defaultdict
-from datetime import datetime, timedelta
+import datetime as dt  # Import the module with a different name
+from datetime import datetime, timedelta  # Import specific classes
 import time
+import uuid
+import secrets
+from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
+from authlib.integrations.flask_client import OAuth
 
 load_dotenv()
 
 # Get API keys and config values from environment variables
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "") 
 BRAVE_SEARCH_TOKEN = os.getenv("BRAVE_SEARCH_TOKEN", "")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "")
+GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "")
+SECRET_KEY = os.getenv("SECRET_KEY", secrets.token_hex(16))
 
 DEFAULT_TIMEZONE = "America/New_York"
 
-WEATHER_RATE_LIMIT = 30  # requests per month
-SEARCH_RATE_LIMIT = 50   # requests per month
-TOTAL_QUERY_LIMIT = 500  # total requests per month
+# Rate limits for different user types
+GUEST_WEATHER_RATE_LIMIT = 3  # requests per month for non-logged-in users
+GUEST_SEARCH_RATE_LIMIT = 5   # requests per month for non-logged-in users
+GUEST_TOTAL_QUERY_LIMIT = 50  # total requests per month for non-logged-in users
+
+USER_WEATHER_RATE_LIMIT = 30  # requests per month for logged-in users
+USER_SEARCH_RATE_LIMIT = 50   # requests per month for logged-in users
+USER_TOTAL_QUERY_LIMIT = 500  # total requests per month for logged-in users
 
 # SQLite database configuration
 DB_FILE = "neubot.db"
@@ -37,6 +51,62 @@ class ThoughtStep:
     description: str
     result: Any
 
+class User(UserMixin):
+    def __init__(self, id, name, email, provider, profile_pic=None):
+        self.id = id
+        self.name = name
+        self.email = email
+        self.provider = provider  # 'google' or 'github'
+        self.profile_pic = profile_pic
+        
+    @staticmethod
+    def get(user_id):
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM users WHERE id=?", (user_id,))
+        user_data = cursor.fetchone()
+        conn.close()
+        
+        if user_data:
+            return User(
+                id=user_data['id'],
+                name=user_data['name'],
+                email=user_data['email'],
+                provider=user_data['provider'],
+                profile_pic=user_data['profile_pic']
+            )
+        return None
+
+# Initialize the database with users table
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    # Create users table if it doesn't exist
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        profile_pic TEXT
+    )
+    ''')
+    
+    # Add user_id column to requests table if it doesn't exist
+    cursor.execute("PRAGMA table_info(requests)")
+    columns = cursor.fetchall()
+    column_names = [column[1] for column in columns]
+    
+    if 'user_id' not in column_names:
+        cursor.execute('ALTER TABLE requests ADD COLUMN user_id TEXT')
+    
+    conn.commit()
+    conn.close()
+
+# Updated rate limiter with user authentication support
 class RateLimiter:
     def __init__(self):
         self._init_db()
@@ -52,7 +122,8 @@ class RateLimiter:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ip TEXT NOT NULL,
             req_type TEXT NOT NULL,
-            timestamp DATETIME NOT NULL
+            timestamp DATETIME NOT NULL,
+            user_id TEXT
         )
         ''')
         
@@ -67,7 +138,7 @@ class RateLimiter:
         conn.commit()
         conn.close()
     
-    def _cleanup_old_requests(self, ip: str, req_type: str):
+    def _cleanup_old_requests(self, ip: str, req_type: str, user_id: Optional[str] = None):
         """Remove requests older than 1 month"""
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
@@ -76,32 +147,51 @@ class RateLimiter:
         month_ago = now - timedelta(days=30)
         month_ago_str = month_ago.strftime("%Y-%m-%d %H:%M:%S")
         
-        # Check if all requests for this IP and type are older than a month
-        cursor.execute('''
-        SELECT COUNT(*) FROM requests 
-        WHERE ip = ? AND req_type = ? AND timestamp > ?
-        ''', (ip, req_type, month_ago_str))
+        if user_id:
+            # Check if all requests for this user and type are older than a month
+            cursor.execute('''
+            SELECT COUNT(*) FROM requests 
+            WHERE user_id = ? AND req_type = ? AND timestamp > ?
+            ''', (user_id, req_type, month_ago_str))
+        else:
+            # Check if all requests for this IP and type are older than a month
+            cursor.execute('''
+            SELECT COUNT(*) FROM requests 
+            WHERE ip = ? AND req_type = ? AND timestamp > ? AND user_id IS NULL
+            ''', (ip, req_type, month_ago_str))
         
         recent_count = cursor.fetchone()[0]
         
         # If no recent requests, reset counter by deleting old ones
         if recent_count == 0:
-            cursor.execute('''
-            DELETE FROM requests 
-            WHERE ip = ? AND req_type = ?
-            ''', (ip, req_type))
+            if user_id:
+                cursor.execute('''
+                DELETE FROM requests 
+                WHERE user_id = ? AND req_type = ?
+                ''', (user_id, req_type))
+            else:
+                cursor.execute('''
+                DELETE FROM requests 
+                WHERE ip = ? AND req_type = ? AND user_id IS NULL
+                ''', (ip, req_type))
             
-            # Update reset date
+            # Update reset date for IP (regardless of user_id)
             cursor.execute('''
             INSERT OR REPLACE INTO reset_dates (ip, reset_date) 
             VALUES (?, ?)
             ''', (ip, now.strftime("%Y-%m-%d %H:%M:%S")))
         else:
             # Otherwise just delete old requests
-            cursor.execute('''
-            DELETE FROM requests 
-            WHERE ip = ? AND req_type = ? AND timestamp < ?
-            ''', (ip, req_type, month_ago_str))
+            if user_id:
+                cursor.execute('''
+                DELETE FROM requests 
+                WHERE user_id = ? AND req_type = ? AND timestamp < ?
+                ''', (user_id, req_type, month_ago_str))
+            else:
+                cursor.execute('''
+                DELETE FROM requests 
+                WHERE ip = ? AND req_type = ? AND timestamp < ? AND user_id IS NULL
+                ''', (ip, req_type, month_ago_str))
         
         conn.commit()
         conn.close()
@@ -141,9 +231,9 @@ class RateLimiter:
         conn.commit()
         conn.close()
     
-    def check_rate_limit(self, ip: str, req_type: str) -> Tuple[bool, int]:
+    def check_rate_limit(self, ip: str, req_type: str, user_id: Optional[str] = None) -> Tuple[bool, int]:
         """Check if request is within rate limits"""
-        self._cleanup_old_requests(ip, req_type)
+        self._cleanup_old_requests(ip, req_type, user_id)
         
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
@@ -151,86 +241,138 @@ class RateLimiter:
         # Get count of requests by type and total
         month_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
         
-        # Check specific limit for API calls
-        if req_type in ["search", "weather"]:
-            limit = SEARCH_RATE_LIMIT if req_type == "search" else WEATHER_RATE_LIMIT
+        # Set appropriate limits based on whether user is authenticated
+        if user_id:
+            search_limit = USER_SEARCH_RATE_LIMIT
+            weather_limit = USER_WEATHER_RATE_LIMIT
+            total_limit = USER_TOTAL_QUERY_LIMIT
+            
+            # Get counts for authenticated user
+            if req_type in ["search", "weather"]:
+                cursor.execute('''
+                SELECT COUNT(*) FROM requests 
+                WHERE user_id = ? AND req_type = ? AND timestamp > ?
+                ''', (user_id, req_type, month_ago))
+                current_count = cursor.fetchone()[0]
             
             cursor.execute('''
             SELECT COUNT(*) FROM requests 
-            WHERE ip = ? AND req_type = ? AND timestamp > ?
-            ''', (ip, req_type, month_ago))
+            WHERE user_id = ? AND req_type = 'total' AND timestamp > ?
+            ''', (user_id, month_ago))
+            total_count = cursor.fetchone()[0]
+        else:
+            # Use guest limits for non-authenticated requests
+            search_limit = GUEST_SEARCH_RATE_LIMIT
+            weather_limit = GUEST_WEATHER_RATE_LIMIT
+            total_limit = GUEST_TOTAL_QUERY_LIMIT
             
-            current_count = cursor.fetchone()[0]
+            # Get counts for non-authenticated requests by IP
+            if req_type in ["search", "weather"]:
+                cursor.execute('''
+                SELECT COUNT(*) FROM requests 
+                WHERE ip = ? AND req_type = ? AND timestamp > ? AND user_id IS NULL
+                ''', (ip, req_type, month_ago))
+                current_count = cursor.fetchone()[0]
+            
+            cursor.execute('''
+            SELECT COUNT(*) FROM requests 
+            WHERE ip = ? AND req_type = 'total' AND timestamp > ? AND user_id IS NULL
+            ''', (ip, month_ago))
+            total_count = cursor.fetchone()[0]
         
-        # Check total queries limit
-        cursor.execute('''
-        SELECT COUNT(*) FROM requests 
-        WHERE ip = ? AND req_type = 'total' AND timestamp > ?
-        ''', (ip, month_ago))
-        
-        total_count = cursor.fetchone()[0]
         conn.close()
         
         # For API calls, check both specific and total limits
         if req_type in ["search", "weather"]:
-            return (current_count < limit and total_count < TOTAL_QUERY_LIMIT), \
-                   min(limit - current_count, TOTAL_QUERY_LIMIT - total_count)
+            limit = search_limit if req_type == "search" else weather_limit
+            return (current_count < limit and total_count < total_limit), \
+                min(limit - current_count, total_limit - total_count)
         
         # For regular queries, only check total limit
-        return (total_count < TOTAL_QUERY_LIMIT), (TOTAL_QUERY_LIMIT - total_count)
+        return (total_count < total_limit), (total_limit - total_count)
     
-    def add_request(self, ip: str, req_type: str):
+    def add_request(self, ip: str, req_type: str, user_id: Optional[str] = None):
         """Record a new request in the database"""
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # Insert the request
+        # Insert the request with user_id if available
         cursor.execute('''
-        INSERT INTO requests (ip, req_type, timestamp)
-        VALUES (?, ?, ?)
-        ''', (ip, req_type, now))
+        INSERT INTO requests (ip, req_type, timestamp, user_id)
+        VALUES (?, ?, ?, ?)
+        ''', (ip, req_type, now, user_id))
         
         # Also add to total queries if not already counted
         if req_type != "total":
             cursor.execute('''
-            INSERT INTO requests (ip, req_type, timestamp)
-            VALUES (?, ?, ?)
-            ''', (ip, "total", now))
+            INSERT INTO requests (ip, req_type, timestamp, user_id)
+            VALUES (?, ?, ?, ?)
+            ''', (ip, "total", now, user_id))
         
         conn.commit()
         conn.close()
     
-    def get_limits(self, ip: str) -> Dict[str, Dict[str, Any]]:
-        """Get current rate limit status for an IP"""
-        self._cleanup_old_requests(ip, "search")
-        self._cleanup_old_requests(ip, "weather")
-        self._cleanup_old_requests(ip, "total")
+    def get_limits(self, ip: str, user_id: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+        """Get current rate limit status for a user or IP"""
+        self._cleanup_old_requests(ip, "search", user_id)
+        self._cleanup_old_requests(ip, "weather", user_id)
+        self._cleanup_old_requests(ip, "total", user_id)
         
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         
         month_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
         
-        # Get counts for each request type
-        cursor.execute('''
-        SELECT COUNT(*) FROM requests 
-        WHERE ip = ? AND req_type = 'search' AND timestamp > ?
-        ''', (ip, month_ago))
-        search_count = cursor.fetchone()[0]
-        
-        cursor.execute('''
-        SELECT COUNT(*) FROM requests 
-        WHERE ip = ? AND req_type = 'weather' AND timestamp > ?
-        ''', (ip, month_ago))
-        weather_count = cursor.fetchone()[0]
-        
-        cursor.execute('''
-        SELECT COUNT(*) FROM requests 
-        WHERE ip = ? AND req_type = 'total' AND timestamp > ?
-        ''', (ip, month_ago))
-        total_count = cursor.fetchone()[0]
+        # Set appropriate limits based on authentication status
+        if user_id:
+            search_limit = USER_SEARCH_RATE_LIMIT
+            weather_limit = USER_WEATHER_RATE_LIMIT
+            total_limit = USER_TOTAL_QUERY_LIMIT
+            
+            # Get counts for authenticated user
+            cursor.execute('''
+            SELECT COUNT(*) FROM requests 
+            WHERE user_id = ? AND req_type = 'search' AND timestamp > ?
+            ''', (user_id, month_ago))
+            search_count = cursor.fetchone()[0]
+            
+            cursor.execute('''
+            SELECT COUNT(*) FROM requests 
+            WHERE user_id = ? AND req_type = 'weather' AND timestamp > ?
+            ''', (user_id, month_ago))
+            weather_count = cursor.fetchone()[0]
+            
+            cursor.execute('''
+            SELECT COUNT(*) FROM requests 
+            WHERE user_id = ? AND req_type = 'total' AND timestamp > ?
+            ''', (user_id, month_ago))
+            total_count = cursor.fetchone()[0]
+        else:
+            # Use guest limits for non-authenticated requests
+            search_limit = GUEST_SEARCH_RATE_LIMIT
+            weather_limit = GUEST_WEATHER_RATE_LIMIT
+            total_limit = GUEST_TOTAL_QUERY_LIMIT
+            
+            # Get counts for non-authenticated requests by IP
+            cursor.execute('''
+            SELECT COUNT(*) FROM requests 
+            WHERE ip = ? AND req_type = 'search' AND timestamp > ? AND user_id IS NULL
+            ''', (ip, month_ago))
+            search_count = cursor.fetchone()[0]
+            
+            cursor.execute('''
+            SELECT COUNT(*) FROM requests 
+            WHERE ip = ? AND req_type = 'weather' AND timestamp > ? AND user_id IS NULL
+            ''', (ip, month_ago))
+            weather_count = cursor.fetchone()[0]
+            
+            cursor.execute('''
+            SELECT COUNT(*) FROM requests 
+            WHERE ip = ? AND req_type = 'total' AND timestamp > ? AND user_id IS NULL
+            ''', (ip, month_ago))
+            total_count = cursor.fetchone()[0]
         
         conn.close()
         
@@ -243,18 +385,18 @@ class RateLimiter:
         
         return {
             "search": {
-                "limit": SEARCH_RATE_LIMIT,
-                "remaining": SEARCH_RATE_LIMIT - search_count,
+                "limit": search_limit,
+                "remaining": search_limit - search_count,
                 "used": search_count
             },
             "weather": {
-                "limit": WEATHER_RATE_LIMIT,
-                "remaining": WEATHER_RATE_LIMIT - weather_count,
+                "limit": weather_limit,
+                "remaining": weather_limit - weather_count,
                 "used": weather_count
             },
             "total": {
-                "limit": TOTAL_QUERY_LIMIT,
-                "remaining": TOTAL_QUERY_LIMIT - total_count,
+                "limit": total_limit,
+                "remaining": total_limit - total_count,
                 "used": total_count
             },
             "reset": {
@@ -404,7 +546,7 @@ class SemanticParser:
             self._add_thought("Found reference to current date/time", "today")
             return "today"
             
-        tomorrow_match = re.search(r"tomorrow", query, re.IGNORECASE)
+        tomorrow_match = re.search(r"tomorrow", query, re.IGNORECASE)  # Fixed: IGNORE_CASE → IGNORECASE
         if tomorrow_match:
             self._add_thought("Found reference to tomorrow", "tomorrow")
             return "tomorrow"
@@ -463,7 +605,7 @@ class SemanticParser:
     def _get_date(self, entities: Dict[str, Any]) -> str:
         """Get the current date"""
         self._add_thought("Executing date tool", None)
-        current_date = datetime.datetime.now().strftime("%A, %B %d, %Y")
+        current_date = datetime.now().strftime("%A, %B %d, %Y")
         return f"Today's date is {current_date}."
     
     def _get_day(self, entities: Dict[str, Any]) -> str:
@@ -482,7 +624,8 @@ class SemanticParser:
         
         # Check rate limit
         ip = request.remote_addr
-        allowed, remaining = rate_limiter.check_rate_limit(ip, "weather")
+        user_id = current_user.get_id() if current_user.is_authenticated else None
+        allowed, remaining = rate_limiter.check_rate_limit(ip, "weather", user_id)
         if not allowed:
             return f"Sorry, I can't get weather information because you've exceeded your monthly limit."
         
@@ -520,7 +663,7 @@ class SemanticParser:
             
             # Record the request if successful
             if response.status_code == 200:
-                rate_limiter.add_request(ip, "weather")
+                rate_limiter.add_request(ip, "weather", user_id)
             
             return f"The weather in {capitalized_location} is {condition} with a temperature of {temp_c:.1f}°C/{temp_f:.1f}°F and {humidity}% humidity."
         
@@ -668,7 +811,8 @@ class SemanticParser:
         
         # Check rate limit
         ip = request.remote_addr
-        allowed, remaining = rate_limiter.check_rate_limit(ip, "search")
+        user_id = current_user.get_id() if current_user.is_authenticated else None
+        allowed, remaining = rate_limiter.check_rate_limit(ip, "search", user_id)
         if not allowed:
             return json.dumps({
                 "type": "search_results",
@@ -725,7 +869,7 @@ class SemanticParser:
             
             # Record the request if successful
             if response.status_code == 200:
-                rate_limiter.add_request(ip, "search")
+                rate_limiter.add_request(ip, "search", user_id)
             
             return json.dumps(results)
             
@@ -738,8 +882,48 @@ class SemanticParser:
 
 # Create a Flask application to serve the API and web UI
 app = Flask(__name__, static_folder='static')
+app.secret_key = SECRET_KEY
+app.config['SESSION_TYPE'] = 'filesystem'
+
+# Initialize LoginManager for user authentication
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login"
+
+# Initialize OAuth for Google and GitHub
+oauth = OAuth(app)
+
+# Configure OAuth providers
+oauth.register(
+    name='google',
+    client_id=GOOGLE_CLIENT_ID,
+    client_secret=GOOGLE_CLIENT_SECRET,
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={'scope': 'openid email profile'}
+)
+
+oauth.register(
+    name='github',
+    client_id=GITHUB_CLIENT_ID,
+    client_secret=GITHUB_CLIENT_SECRET,
+    authorize_url='https://github.com/login/oauth/authorize',
+    authorize_params=None,
+    access_token_url='https://github.com/login/oauth/access_token',
+    access_token_params=None,
+    refresh_token_url=None,
+    redirect_uri=None,
+    client_kwargs={'scope': 'user:email'},
+)
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.get(user_id)
+
 parser = SemanticParser()
 rate_limiter = RateLimiter()
+
+# Initialize the database with user table
+init_db()
 
 @app.route('/api/query', methods=['POST'])
 def process_query():
@@ -752,7 +936,8 @@ def process_query():
     
     # Check total query limit first
     ip = request.remote_addr
-    allowed, remaining = rate_limiter.check_rate_limit(ip, "total")
+    user_id = current_user.get_id() if current_user.is_authenticated else None
+    allowed, remaining = rate_limiter.check_rate_limit(ip, "total", user_id)
     if not allowed:
         return jsonify({
             "response": "Sorry, I can't respond because you've exceeded your monthly limit of queries.",
@@ -761,7 +946,7 @@ def process_query():
         })
     
     # Record the query in total count
-    rate_limiter.add_request(ip, "total")
+    rate_limiter.add_request(ip, "total", user_id)
     
     # Get response, thoughts, and highlighted query
     response, thoughts, highlighted_query = parser.process_query(query, user_timezone)
@@ -782,8 +967,134 @@ def process_query():
 def get_rate_limits():
     """Get current rate limit status for requesting IP"""
     ip = request.remote_addr
-    limits = rate_limiter.get_limits(ip)
+    user_id = current_user.get_id() if current_user.is_authenticated else None
+    limits = rate_limiter.get_limits(ip, user_id)
     return jsonify(limits)
+
+@app.route('/api/user', methods=['GET'])
+def get_user_info():
+    """Get information about the currently logged in user"""
+    if current_user.is_authenticated:
+        return jsonify({
+            "authenticated": True,
+            "user": {
+                "id": current_user.id,
+                "name": current_user.name,
+                "email": current_user.email,
+                "provider": current_user.provider,
+                "profile_pic": current_user.profile_pic
+            }
+        })
+    else:
+        return jsonify({
+            "authenticated": False
+        })
+
+@app.route('/login')
+def login():
+    """Show login options page"""
+    return send_from_directory('static', 'login.html')
+
+@app.route('/login/google')
+def login_google():
+    """Login with Google OAuth"""
+    redirect_uri = url_for('auth_google', _external=True)
+    return oauth.google.authorize_redirect(redirect_uri)
+
+@app.route('/login/github')
+def login_github():
+    """Login with GitHub OAuth"""
+    redirect_uri = url_for('auth_github', _external=True)
+    return oauth.github.authorize_redirect(redirect_uri)
+
+@app.route('/auth/google')
+def auth_google():
+    """Handle Google OAuth callback"""
+    token = oauth.google.authorize_access_token()
+    user_info = oauth.google.parse_id_token(token)
+    
+    # Generate a unique user ID
+    user_id = f"google_{user_info['sub']}"
+    
+    # Check if user exists in database
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    existing_user = cursor.fetchone()
+    
+    if not existing_user:
+        # Create new user
+        cursor.execute(
+            "INSERT INTO users (id, name, email, provider, profile_pic) VALUES (?, ?, ?, ?, ?)",
+            (user_id, user_info.get('name'), user_info.get('email'), 'google', user_info.get('picture'))
+        )
+        conn.commit()
+    
+    conn.close()
+    
+    # Create user object and login
+    user = User(
+        id=user_id,
+        name=user_info.get('name'),
+        email=user_info.get('email'),
+        provider='google',
+        profile_pic=user_info.get('picture')
+    )
+    login_user(user)
+    
+    return redirect('/')
+
+@app.route('/auth/github')
+def auth_github():
+    """Handle GitHub OAuth callback"""
+    token = oauth.github.authorize_access_token()
+    resp = oauth.github.get('https://api.github.com/user', token=token)
+    user_info = resp.json()
+    
+    # Get user email - GitHub doesn't include it in the primary user info
+    email_resp = oauth.github.get('https://api.github.com/user/emails', token=token)
+    emails = email_resp.json()
+    primary_email = next((email['email'] for email in emails if email['primary']), 
+                          emails[0]['email'] if emails else 'no-email@example.com')
+    
+    # Generate a unique user ID
+    user_id = f"github_{user_info['id']}"
+    
+    # Check if user exists in database
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    existing_user = cursor.fetchone()
+    
+    if not existing_user:
+        # Create new user
+        cursor.execute(
+            "INSERT INTO users (id, name, email, provider, profile_pic) VALUES (?, ?, ?, ?, ?)",
+            (user_id, user_info.get('name', user_info.get('login')), primary_email, 'github', user_info.get('avatar_url'))
+        )
+        conn.commit()
+    
+    conn.close()
+    
+    # Create user object and login
+    user = User(
+        id=user_id,
+        name=user_info.get('name', user_info.get('login')),
+        email=primary_email,
+        provider='github',
+        profile_pic=user_info.get('avatar_url')
+    )
+    login_user(user)
+    
+    return redirect('/')
+
+@app.route('/logout')
+def logout():
+    """Log out the current user"""
+    logout_user()
+    return redirect('/')
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')

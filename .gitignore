@@ -1,2 +1,4 @@
 /.vscode
-/neubot.db
+/neubot.db\
+.env
+.env
