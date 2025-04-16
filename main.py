@@ -12,8 +12,8 @@ from timezonefinder import TimezoneFinder
 from geopy.geocoders import Nominatim
 from dotenv import load_dotenv
 from collections import defaultdict
-import datetime as dt  # Import the module with a different name
-from datetime import datetime, timedelta  # Import specific classes
+import datetime as dt 
+from datetime import datetime, timedelta
 import time
 import uuid
 import secrets
@@ -22,7 +22,6 @@ from authlib.integrations.flask_client import OAuth
 
 load_dotenv()
 
-# Get API keys and config values from environment variables
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "") 
 BRAVE_SEARCH_TOKEN = os.getenv("BRAVE_SEARCH_TOKEN", "")
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
@@ -33,7 +32,6 @@ SECRET_KEY = os.getenv("SECRET_KEY", secrets.token_hex(16))
 
 DEFAULT_TIMEZONE = "America/New_York"
 
-# Rate limits for different user types
 GUEST_WEATHER_RATE_LIMIT = 3  # requests per month for non-logged-in users
 GUEST_SEARCH_RATE_LIMIT = 5   # requests per month for non-logged-in users
 GUEST_TOTAL_QUERY_LIMIT = 50  # total requests per month for non-logged-in users
@@ -42,7 +40,6 @@ USER_WEATHER_RATE_LIMIT = 30  # requests per month for logged-in users
 USER_SEARCH_RATE_LIMIT = 50   # requests per month for logged-in users
 USER_TOTAL_QUERY_LIMIT = 500  # total requests per month for logged-in users
 
-# SQLite database configuration
 DB_FILE = "neubot.db"
 
 @dataclass
@@ -56,7 +53,7 @@ class User(UserMixin):
         self.id = id
         self.name = name
         self.email = email
-        self.provider = provider  # 'google' or 'github'
+        self.provider = provider
         self.profile_pic = profile_pic
         
     @staticmethod
@@ -79,12 +76,10 @@ class User(UserMixin):
             )
         return None
 
-# Initialize the database with users table
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
-    # Create users table if it doesn't exist
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
@@ -95,7 +90,6 @@ def init_db():
     )
     ''')
     
-    # Add user_id column to requests table if it doesn't exist
     cursor.execute("PRAGMA table_info(requests)")
     columns = cursor.fetchall()
     column_names = [column[1] for column in columns]
@@ -106,7 +100,6 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Updated rate limiter with user authentication support
 class RateLimiter:
     def __init__(self):
         self._init_db()
@@ -116,7 +109,6 @@ class RateLimiter:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         
-        # Create requests table to track all API requests
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -127,7 +119,6 @@ class RateLimiter:
         )
         ''')
         
-        # Create reset_dates table to track when limits were last reset
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS reset_dates (
             ip TEXT PRIMARY KEY,
@@ -148,13 +139,11 @@ class RateLimiter:
         month_ago_str = month_ago.strftime("%Y-%m-%d %H:%M:%S")
         
         if user_id:
-            # Check if all requests for this user and type are older than a month
             cursor.execute('''
             SELECT COUNT(*) FROM requests 
             WHERE user_id = ? AND req_type = ? AND timestamp > ?
             ''', (user_id, req_type, month_ago_str))
         else:
-            # Check if all requests for this IP and type are older than a month
             cursor.execute('''
             SELECT COUNT(*) FROM requests 
             WHERE ip = ? AND req_type = ? AND timestamp > ? AND user_id IS NULL
@@ -162,7 +151,6 @@ class RateLimiter:
         
         recent_count = cursor.fetchone()[0]
         
-        # If no recent requests, reset counter by deleting old ones
         if recent_count == 0:
             if user_id:
                 cursor.execute('''
@@ -175,13 +163,11 @@ class RateLimiter:
                 WHERE ip = ? AND req_type = ? AND user_id IS NULL
                 ''', (ip, req_type))
             
-            # Update reset date for IP (regardless of user_id)
             cursor.execute('''
             INSERT OR REPLACE INTO reset_dates (ip, reset_date) 
             VALUES (?, ?)
             ''', (ip, now.strftime("%Y-%m-%d %H:%M:%S")))
         else:
-            # Otherwise just delete old requests
             if user_id:
                 cursor.execute('''
                 DELETE FROM requests 
@@ -201,7 +187,6 @@ class RateLimiter:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         
-        # Get last reset date
         cursor.execute('''
         SELECT reset_date FROM reset_dates WHERE ip = ?
         ''', (ip,))
@@ -212,7 +197,6 @@ class RateLimiter:
         if result:
             last_reset = datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S")
         else:
-            # If no reset date found, use current time and save it
             last_reset = datetime.now()
             self._save_reset_date(ip, last_reset)
         
@@ -238,16 +222,13 @@ class RateLimiter:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         
-        # Get count of requests by type and total
         month_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
         
-        # Set appropriate limits based on whether user is authenticated
         if user_id:
             search_limit = USER_SEARCH_RATE_LIMIT
             weather_limit = USER_WEATHER_RATE_LIMIT
             total_limit = USER_TOTAL_QUERY_LIMIT
             
-            # Get counts for authenticated user
             if req_type in ["search", "weather"]:
                 cursor.execute('''
                 SELECT COUNT(*) FROM requests 
@@ -261,12 +242,10 @@ class RateLimiter:
             ''', (user_id, month_ago))
             total_count = cursor.fetchone()[0]
         else:
-            # Use guest limits for non-authenticated requests
             search_limit = GUEST_SEARCH_RATE_LIMIT
             weather_limit = GUEST_WEATHER_RATE_LIMIT
             total_limit = GUEST_TOTAL_QUERY_LIMIT
             
-            # Get counts for non-authenticated requests by IP
             if req_type in ["search", "weather"]:
                 cursor.execute('''
                 SELECT COUNT(*) FROM requests 
@@ -282,13 +261,11 @@ class RateLimiter:
         
         conn.close()
         
-        # For API calls, check both specific and total limits
         if req_type in ["search", "weather"]:
             limit = search_limit if req_type == "search" else weather_limit
             return (current_count < limit and total_count < total_limit), \
                 min(limit - current_count, total_limit - total_count)
         
-        # For regular queries, only check total limit
         return (total_count < total_limit), (total_limit - total_count)
     
     def add_request(self, ip: str, req_type: str, user_id: Optional[str] = None):
@@ -298,13 +275,11 @@ class RateLimiter:
         
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # Insert the request with user_id if available
         cursor.execute('''
         INSERT INTO requests (ip, req_type, timestamp, user_id)
         VALUES (?, ?, ?, ?)
         ''', (ip, req_type, now, user_id))
         
-        # Also add to total queries if not already counted
         if req_type != "total":
             cursor.execute('''
             INSERT INTO requests (ip, req_type, timestamp, user_id)
@@ -325,13 +300,11 @@ class RateLimiter:
         
         month_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
         
-        # Set appropriate limits based on authentication status
         if user_id:
             search_limit = USER_SEARCH_RATE_LIMIT
             weather_limit = USER_WEATHER_RATE_LIMIT
             total_limit = USER_TOTAL_QUERY_LIMIT
             
-            # Get counts for authenticated user
             cursor.execute('''
             SELECT COUNT(*) FROM requests 
             WHERE user_id = ? AND req_type = 'search' AND timestamp > ?
@@ -350,12 +323,10 @@ class RateLimiter:
             ''', (user_id, month_ago))
             total_count = cursor.fetchone()[0]
         else:
-            # Use guest limits for non-authenticated requests
             search_limit = GUEST_SEARCH_RATE_LIMIT
             weather_limit = GUEST_WEATHER_RATE_LIMIT
             total_limit = GUEST_TOTAL_QUERY_LIMIT
             
-            # Get counts for non-authenticated requests by IP
             cursor.execute('''
             SELECT COUNT(*) FROM requests 
             WHERE ip = ? AND req_type = 'search' AND timestamp > ? AND user_id IS NULL
@@ -376,11 +347,8 @@ class RateLimiter:
         
         conn.close()
         
-        # Calculate next reset date
         next_reset = self._get_next_reset(ip)
         reset_timestamp = int(next_reset.timestamp())
-        
-        # Calculate days until reset
         days_remaining = (next_reset - datetime.now()).days
         
         return {
@@ -410,7 +378,6 @@ class SemanticParser:
     def __init__(self):
         self.thoughts: List[ThoughtStep] = []
         
-        # Define question words that indicate different intent types
         self.query_indicators = {
             "what": "information_query",
             "how": "information_query",
@@ -430,16 +397,14 @@ class SemanticParser:
             "get": "command_query",
         }
         
-        # Define tools/entities we can recognize
         self.known_tools = {
             "time": self._get_time,
             "weather": self._get_weather,
             "date": self._get_date,
             "day": self._get_day,
-            "search": self._web_search_tool,  # Change this line
+            "search": self._web_search_tool,
         }
         
-        # Define entities we can extract
         self.entity_types = {
             "location": self._extract_location,
             "date": self._extract_date,
@@ -457,7 +422,6 @@ class SemanticParser:
         """Determine the type of query based on first few words"""
         self._add_thought("Looking for query indicators", tokens[:3])
         
-        # Check first few words for query indicators
         for i in range(min(3, len(tokens))):
             word = tokens[i].lower().strip(".,?!")
             if word in self.query_indicators:
@@ -492,13 +456,11 @@ class SemanticParser:
         
         for tool in tools:
             if tool == "weather":
-                # Weather tool needs a location
                 location = self._extract_location(query)
                 if location:
                     entities["location"] = location
             
             if tool in ["time", "date", "day"]:
-                # Time tools might need date specification
                 date_spec = self._extract_date(query)
                 if date_spec:
                     entities["date"] = date_spec
@@ -510,10 +472,8 @@ class SemanticParser:
         """Extract location entity from query"""
         self._add_thought("Looking for location in query", None)
         
-        # Convert common location words to title case for better matching
         title_query = query.title()
         
-        # First try to match locations after prepositions (case insensitive)
         prep_pattern = r"\b(?:in|at|for)\s+([A-Za-z][A-Za-z\s-]+?)(?=$|[.?!,]|\s+(?:and|with|at|is|are|was|were))"
         prep_match = re.search(prep_pattern, title_query, re.IGNORECASE)
         if prep_match:
@@ -521,13 +481,11 @@ class SemanticParser:
             self._add_thought("Found location after preposition", location)
             return location
         
-        # Then look for potential place names (case insensitive)
         location_pattern = r"\b([A-Za-z][A-Za-z]+(?:\s+[A-Za-z]+)*)\b"
         location_matches = re.finditer(location_pattern, title_query)
         
         for match in location_matches:
             location = match.group(1).strip()
-            # Verify it's not a common sentence starter or word
             if not any(word.lower() in location.lower() for word in 
                       ["what", "where", "when", "how", "why", "the", "weather", "time"]):
                 self._add_thought("Found standalone location", location)
@@ -540,21 +498,18 @@ class SemanticParser:
         """Extract date specification from query"""
         self._add_thought("Looking for date specification in query", None)
         
-        # Look for specific date indicators
         today_match = re.search(r"today|now", query, re.IGNORECASE)
         if today_match:
             self._add_thought("Found reference to current date/time", "today")
             return "today"
             
-        tomorrow_match = re.search(r"tomorrow", query, re.IGNORECASE)  # Fixed: IGNORE_CASE → IGNORECASE
+        tomorrow_match = re.search(r"tomorrow", query, re.IGNORECASE)
         if tomorrow_match:
             self._add_thought("Found reference to tomorrow", "tomorrow")
             return "tomorrow"
-        
-        # More complex date parsing could be added here
-        
-        self._add_thought("No specific date reference found", "today")  # Default to today
-        return "today"  # Default assumption
+                
+        self._add_thought("No specific date reference found", "today") 
+        return "today"
     
     def _get_time(self, entities: Dict[str, Any]) -> str:
         """Get the current time, optionally for a specific location"""
@@ -565,7 +520,6 @@ class SemanticParser:
         
         try:
             if location:
-                # Get timezone for the specified location
                 geolocator = Nominatim(user_agent="neubot")
                 location_data = geolocator.geocode(location)
                 
@@ -587,7 +541,6 @@ class SemanticParser:
                 return f"The current time in {location} is {time_str} ({timezone_str})."
                 
             else:
-                # Use user's timezone if provided, otherwise default
                 try:
                     timezone = pytz.timezone(user_timezone)
                     current_time = datetime.now(timezone)
@@ -622,7 +575,6 @@ class SemanticParser:
         if location == "unknown location":
             return "I need a location to check the weather. Please specify a city or place."
         
-        # Check rate limit
         ip = request.remote_addr
         user_id = current_user.get_id() if current_user.is_authenticated else None
         allowed, remaining = rate_limiter.check_rate_limit(ip, "weather", user_id)
@@ -630,7 +582,6 @@ class SemanticParser:
             return f"Sorry, I can't get weather information because you've exceeded your monthly limit."
         
         try:
-            # Get coordinates for the location
             geolocator = Nominatim(user_agent="neubot")
             location_data = geolocator.geocode(location)
             
@@ -638,13 +589,11 @@ class SemanticParser:
                 self._add_thought("Could not geocode location", location)
                 return f"I couldn't find the location '{location}'. Please check the spelling or try a different location."
             
-            # Capitalize location name properly
             capitalized_location = location_data.address.split(',')[0].strip()
             
             lat, lon = location_data.latitude, location_data.longitude
             self._add_thought("Geocoded location", {"lat": lat, "lon": lon})
             
-            # Call OpenWeatherMap API
             weather_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={OPENWEATHER_API_KEY}&units=metric"
             response = requests.get(weather_url)
             
@@ -654,14 +603,13 @@ class SemanticParser:
             
             weather_data = response.json()
             temp_c = weather_data["main"]["temp"]
-            # Convert Celsius to Fahrenheit
+            # convert real units to wrong units
             temp_f = (temp_c * 9/5) + 32
             condition = weather_data["weather"][0]["description"]
             humidity = weather_data["main"]["humidity"]
             
             self._add_thought("Weather data retrieved", {"temp_c": temp_c, "temp_f": temp_f, "condition": condition})
             
-            # Record the request if successful
             if response.status_code == 200:
                 rate_limiter.add_request(ip, "weather", user_id)
             
@@ -675,19 +623,16 @@ class SemanticParser:
         """Add HTML spans for color highlighting query parts"""
         result = query
         
-        # Highlight query indicators (purple)
         query_indicators = ["what", "what's", "how", "when", "where", "who", "why", "is", "can", "tell", "show"]
         for indicator in query_indicators:
             pattern = fr'\b{indicator}\b'
             result = re.sub(pattern, f'<span class="query-indicator">{indicator}</span>', result, flags=re.IGNORECASE)
         
-        # Highlight tools (red)
         tools = ["time", "weather", "date", "day"]
         for tool in tools:
             pattern = fr'\b{tool}\b'
             result = re.sub(pattern, f'<span class="tool-reference">{tool}</span>', result, flags=re.IGNORECASE)
         
-        # Highlight location (yellow) - using passed location
         if location:
             escaped_location = re.escape(location)
             pattern = fr'\b{escaped_location}\b'
@@ -707,17 +652,13 @@ class SemanticParser:
         self._add_thought("Received query", query)
         self._add_thought("User timezone", user_timezone)
         
-        # Tokenize the query
         tokens = query.split()
         self._add_thought("Tokenized query", tokens)
         
-        # Step 1: Determine query type from question words
         query_type = self._extract_query_type(tokens)
         
-        # Step 2: Identify which tools are mentioned or implied
         tools = self._identify_tools(tokens)
         
-        # If no explicit tools found, try to infer from context
         if not tools:
             self._add_thought("No explicit tools found, inferring from context", None)
             if query_type == "time_query" or "time" in query.lower():
@@ -733,17 +674,13 @@ class SemanticParser:
                 tools.add("day")
                 self._add_thought("Inferred tool from context", "day")
         
-        # Step 3: Extract relevant entities based on identified tools
         entities = self._extract_entities(query, tools)
-        extracted_location = entities.get("location")  # Store extracted location
+        extracted_location = entities.get("location")
         
-        # Add user timezone to entities
         entities["user_timezone"] = user_timezone
         
-        # Update the search inference logic
         if not tools or query_type == "command_query":
             self._add_thought("No explicit tools found, trying search", None)
-            # Extract search terms by removing query indicators
             search_terms = query.lower()
             for indicator in ["search", "find", "show", "get", "look up", "tell me about", "what is", "who is", "where is"]:
                 search_terms = search_terms.replace(indicator, "").strip()
@@ -752,7 +689,6 @@ class SemanticParser:
                 entities["search_query"] = search_terms
                 self._add_thought("Inferred search tool", {"terms": search_terms})
         
-        # Step 4: Execute the appropriate tools
         if tools:
             self._add_thought("Preparing to execute tools", list(tools))
             responses = []
@@ -780,7 +716,6 @@ class SemanticParser:
         if not query:
             return "What would you like me to search for?"
             
-        # Define searchable capabilities
         capabilities = {
             "time": "I can tell you the current time in any location or timezone.",
             "weather": "I can check the weather conditions, temperature, and humidity for any location.",
@@ -788,7 +723,6 @@ class SemanticParser:
             "day": "I can tell you the current day of the week.",
         }
         
-        # Search through capabilities
         matches = []
         for key, description in capabilities.items():
             if query in key.lower() or query in description.lower():
@@ -809,7 +743,6 @@ class SemanticParser:
         if not query:
             return "What would you like me to search for?"
         
-        # Check rate limit
         ip = request.remote_addr
         user_id = current_user.get_id() if current_user.is_authenticated else None
         allowed, remaining = rate_limiter.check_rate_limit(ip, "search", user_id)
@@ -845,7 +778,7 @@ class SemanticParser:
             data = response.json()
             results = {
                 "type": "search_results",
-                "query": query,  # Keep the query for displaying
+                "query": query,
                 "spellcheck": data.get("spellcheck", None),
                 "results": [],
                 "meta": {
@@ -867,7 +800,6 @@ class SemanticParser:
                         "favicon": result.get("favicon", "")
                     })
             
-            # Record the request if successful
             if response.status_code == 200:
                 rate_limiter.add_request(ip, "search", user_id)
             
@@ -880,20 +812,16 @@ class SemanticParser:
                 "error": "Search failed"
             })
 
-# Create a Flask application to serve the API and web UI
 app = Flask(__name__, static_folder='static')
 app.secret_key = SECRET_KEY
 app.config['SESSION_TYPE'] = 'filesystem'
 
-# Initialize LoginManager for user authentication
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
 
-# Initialize OAuth for Google and GitHub
 oauth = OAuth(app)
 
-# Configure OAuth providers
 oauth.register(
     name='google',
     client_id=GOOGLE_CLIENT_ID,
@@ -922,7 +850,6 @@ def load_user(user_id):
 parser = SemanticParser()
 rate_limiter = RateLimiter()
 
-# Initialize the database with user table
 init_db()
 
 @app.route('/api/query', methods=['POST'])
@@ -934,7 +861,6 @@ def process_query():
     if not query:
         return jsonify({"error": "No query provided"}), 400
     
-    # Check total query limit first
     ip = request.remote_addr
     user_id = current_user.get_id() if current_user.is_authenticated else None
     allowed, remaining = rate_limiter.check_rate_limit(ip, "total", user_id)
@@ -945,13 +871,10 @@ def process_query():
             "highlightedQuery": query
         })
     
-    # Record the query in total count
     rate_limiter.add_request(ip, "total", user_id)
     
-    # Get response, thoughts, and highlighted query
     response, thoughts, highlighted_query = parser.process_query(query, user_timezone)
     
-    # Convert thoughts to serializable format
     thoughts_serializable = [
         {"description": t.description, "result": str(t.result)} 
         for t in thoughts
@@ -1013,10 +936,8 @@ def auth_google():
     token = oauth.google.authorize_access_token()
     user_info = oauth.google.parse_id_token(token)
     
-    # Generate a unique user ID
     user_id = f"google_{user_info['sub']}"
     
-    # Check if user exists in database
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
@@ -1024,7 +945,6 @@ def auth_google():
     existing_user = cursor.fetchone()
     
     if not existing_user:
-        # Create new user
         cursor.execute(
             "INSERT INTO users (id, name, email, provider, profile_pic) VALUES (?, ?, ?, ?, ?)",
             (user_id, user_info.get('name'), user_info.get('email'), 'google', user_info.get('picture'))
@@ -1033,7 +953,6 @@ def auth_google():
     
     conn.close()
     
-    # Create user object and login
     user = User(
         id=user_id,
         name=user_info.get('name'),
@@ -1052,16 +971,13 @@ def auth_github():
     resp = oauth.github.get('https://api.github.com/user', token=token)
     user_info = resp.json()
     
-    # Get user email - GitHub doesn't include it in the primary user info
     email_resp = oauth.github.get('https://api.github.com/user/emails', token=token)
     emails = email_resp.json()
     primary_email = next((email['email'] for email in emails if email['primary']), 
                           emails[0]['email'] if emails else 'no-email@example.com')
     
-    # Generate a unique user ID
     user_id = f"github_{user_info['id']}"
     
-    # Check if user exists in database
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
@@ -1069,7 +985,6 @@ def auth_github():
     existing_user = cursor.fetchone()
     
     if not existing_user:
-        # Create new user
         cursor.execute(
             "INSERT INTO users (id, name, email, provider, profile_pic) VALUES (?, ?, ?, ?, ?)",
             (user_id, user_info.get('name', user_info.get('login')), primary_email, 'github', user_info.get('avatar_url'))
@@ -1078,7 +993,6 @@ def auth_github():
     
     conn.close()
     
-    # Create user object and login
     user = User(
         id=user_id,
         name=user_info.get('name', user_info.get('login')),
@@ -1104,5 +1018,4 @@ def serve_static(path):
     return send_from_directory('static', path)
 
 if __name__ == "__main__":
-    # Run Flask app
     app.run(debug=True, port=5300)

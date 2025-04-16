@@ -4,14 +4,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const thinkingProcess = document.getElementById('thinking-process');
     const sendButton = document.getElementById('send-button');
     
-    // Keep track of active details toggle
     let activeDetailsToggle = null;
-    
-    // Initialize settings
     let highlightEnabled = false;
     let sendButtonEnabled = false;
     
-    // Load saved settings from localStorage
     function loadSettings() {
         const savedHighlight = localStorage.getItem('neubot_highlight_enabled');
         highlightEnabled = savedHighlight === 'true';
@@ -19,7 +15,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const savedSendButton = localStorage.getItem('neubot_send_button_enabled');
         sendButtonEnabled = savedSendButton === 'true';
         
-        // Update the toggles in the settings panel
         const highlightToggle = document.getElementById('highlight-toggle');
         if (highlightToggle) {
             highlightToggle.checked = highlightEnabled;
@@ -30,11 +25,9 @@ document.addEventListener('DOMContentLoaded', function() {
             sendButtonToggle.checked = sendButtonEnabled;
         }
         
-        // Apply send button visibility
         updateSendButtonVisibility();
     }
     
-    // Update send button visibility based on settings
     function updateSendButtonVisibility() {
         if (sendButtonEnabled) {
             sendButton.classList.add('visible');
@@ -43,7 +36,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Handle input changes for send button visibility
     queryInput.addEventListener('input', function() {
         if (this.value.trim() !== '' && sendButtonEnabled) {
             sendButton.classList.add('visible');
@@ -52,18 +44,15 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Handle Enter key press in input field
     queryInput.addEventListener('keypress', function(event) {
         if (event.key === 'Enter') {
             processQuery();
         }
     });
     
-    // Handle send button click with animation
     sendButton.addEventListener('click', function() {
         this.classList.add('clicked');
         
-        // Remove the class after animation completes
         setTimeout(() => {
             this.classList.remove('clicked');
         }, 300);
@@ -75,19 +64,15 @@ document.addEventListener('DOMContentLoaded', function() {
         const query = queryInput.value.trim();
         if (!query) return;
         
-        // Clear input
+
         queryInput.value = '';
         
-        // Add user message first with plain text
         const userMessageDiv = addUserMessage(query, null);
         
-        // Add sending animation class
         userMessageDiv.classList.add('sending');
         
-        // Then add typing indicator
         const typingIndicator = addTypingIndicator();
         
-        // Send request to API
         fetch('/api/query', {
             method: 'POST',
             headers: {
@@ -100,10 +85,8 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(response => response.json())
         .then(data => {
-            // Remove typing indicator
             typingIndicator.remove();
             
-            // Update the specific user message with highlighted version if highlighting is enabled
             if (highlightEnabled && data.highlightedQuery) {
                 const queryDiv = userMessageDiv.querySelector('.highlighted-query');
                 if (queryDiv) {
@@ -111,10 +94,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             
-            // Add bot response
             addBotMessage(data.response, data.thoughts);
             
-            // Scroll to bottom
             scrollToBottom();
         })
         .catch(error => {
@@ -141,7 +122,7 @@ document.addEventListener('DOMContentLoaded', function() {
         chatContainer.appendChild(messageDiv);
         scrollToBottom();
         
-        return messageDiv; // Return the message div for later reference
+        return messageDiv;
     }
     
     function addBotMessage(text, thoughts) {
@@ -152,7 +133,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const detailsId = 'details-' + Date.now();
         const toggleId = 'toggle-' + Date.now();
         
-        // Try to parse the response as JSON for search results
         let searchResults = null;
         try {
             const data = JSON.parse(text);
@@ -160,7 +140,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 searchResults = data;
             }
         } catch (e) {
-            // Not JSON, treat as regular text
+            // no results, just a normal message so move on, there are 100% better ways to do this but idrc
         }
         
         let messageContent;
@@ -184,15 +164,12 @@ document.addEventListener('DOMContentLoaded', function() {
         
         chatContainer.appendChild(messageDiv);
         
-        // Fill the thinking process content
         const detailsElement = document.getElementById(detailsId);
         displayThoughtProcess(thoughts, detailsElement);
         
-        // Set up toggle behavior
         const toggleElement = document.getElementById(toggleId);
         toggleElement.addEventListener('click', function() {
             if (detailsElement.style.display === 'none') {
-                // Hide any previously open details
                 if (activeDetailsToggle && activeDetailsToggle !== toggleElement) {
                     const activeDetailsId = activeDetailsToggle.getAttribute('data-details-id');
                     if (activeDetailsId) {
@@ -202,7 +179,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
                 
-                // Show this details
                 detailsElement.style.display = 'block';
                 toggleElement.textContent = 'Hide details';
                 toggleElement.setAttribute('data-details-id', detailsId);
@@ -217,7 +193,6 @@ document.addEventListener('DOMContentLoaded', function() {
         scrollToBottom();
     }
     
-    // Add this function to fetch rate limits
     async function getRateLimits() {
         try {
             const response = await fetch('/api/limits');
@@ -229,7 +204,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Add this function to fetch user info
     async function getUserInfo() {
         try {
             const response = await fetch('/api/user');
@@ -241,7 +215,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Update the search results formatting to handle rate limit errors
     function formatSearchResults(data) {
         if (data.error) {
             return `<div class="search-error">
@@ -252,15 +225,12 @@ document.addEventListener('DOMContentLoaded', function() {
     
         let html = '<div class="search-results">';
         
-        // Add header
         html += `<div class="search-header">${data.meta.header}</div>`;
         
-        // Add spell check suggestion if present
         if (data.spellcheck) {
             html += `<div class="search-spellcheck">Did you mean: <em>${data.spellcheck}</em>?</div>`;
         }
         
-        // Add results container
         html += '<div class="search-results-container">';
         
         data.results.forEach(result => {
@@ -295,7 +265,6 @@ document.addEventListener('DOMContentLoaded', function() {
         
         chatContainer.appendChild(indicatorDiv);
         
-        // Animate dots
         const dots = indicatorDiv.querySelector('.thinking-dots');
         let dotCount = 0;
         const interval = setInterval(() => {
@@ -303,10 +272,8 @@ document.addEventListener('DOMContentLoaded', function() {
             dots.textContent = '.'.repeat(dotCount);
         }, 500);
         
-        // Store the interval ID so we can clear it later
         indicatorDiv.animationInterval = interval;
         
-        // Custom remove method that also clears the interval
         indicatorDiv.remove = function() {
             clearInterval(this.animationInterval);
             this.parentNode.removeChild(this);
@@ -345,22 +312,18 @@ document.addEventListener('DOMContentLoaded', function() {
         chatContainer.scrollTop = chatContainer.scrollHeight;
     }
     
-    // Add a welcome message when the page loads
-    addBotMessage('Hi! My name is neubot. How can I help you today?', []);
+    addBotMessage('Hi! How can I help you?', []);
 
-    // Add after existing DOMContentLoaded code
     const settingsModal = document.getElementById('settings-modal');
     const closeModalBtn = document.querySelector('.close-modal');
     const sidebarItems = document.querySelectorAll('.sidebar-item');
 
-    // Add settings button to header
     const h1 = document.querySelector('h1');
     const settingsBtn = document.createElement('button');
     settingsBtn.className = 'settings-button';
     settingsBtn.innerHTML = '⚙️';
     h1.appendChild(settingsBtn);
 
-    // Settings button styles
     const style = document.createElement('style');
     style.textContent = `
         .settings-button {
@@ -379,12 +342,11 @@ document.addEventListener('DOMContentLoaded', function() {
     `;
     document.head.appendChild(style);
 
-    // Modal functionality
     settingsBtn.addEventListener('click', () => {
         settingsModal.style.display = 'block';
         setTimeout(() => {
             settingsModal.classList.add('open');
-        }, 10); // Small delay to ensure transition works
+        }, 10); 
         updateRateLimits();
         updateUserInfo();
     });
@@ -393,7 +355,7 @@ document.addEventListener('DOMContentLoaded', function() {
         settingsModal.classList.remove('open');
         setTimeout(() => {
             settingsModal.style.display = 'none';
-        }, 300); // Match the transition duration
+        }, 300);
     });
 
     settingsModal.addEventListener('click', (e) => {
@@ -405,20 +367,16 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Sidebar navigation with animation
+
     sidebarItems.forEach(item => {
         item.addEventListener('click', () => {
-            // Remove active class from all items
             sidebarItems.forEach(i => i.classList.remove('active'));
-            // Add active class to clicked item
             item.classList.add('active');
             
-            // Hide all panels first
             document.querySelectorAll('.panel').forEach(p => {
                 p.classList.remove('active');
             });
             
-            // Show corresponding panel with a small delay for transition
             const panelId = item.dataset.panel + '-panel';
             setTimeout(() => {
                 document.getElementById(panelId).classList.add('active');
@@ -426,12 +384,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Rate limits functionality
     async function updateRateLimits() {
         try {
             const limits = await getRateLimits();
             
-            // Update search limits
             const searchUsed = limits.search.used;
             const searchLimit = limits.search.limit;
             const searchRemaining = limits.search.remaining;
@@ -442,7 +398,6 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('search-progress').style.width = 
                 `${(searchUsed / searchLimit) * 100}%`;
             
-            // Update weather limits
             const weatherUsed = limits.weather.used;
             const weatherLimit = limits.weather.limit;
             const weatherRemaining = limits.weather.remaining;
@@ -453,7 +408,6 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('weather-progress').style.width = 
                 `${(weatherUsed / weatherLimit) * 100}%`;
             
-            // Update total limits
             const totalUsed = limits.total.used;
             const totalLimit = limits.total.limit;
             const totalRemaining = limits.total.remaining;
@@ -464,7 +418,6 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('total-progress').style.width = 
                 `${(totalUsed / totalLimit) * 100}%`;
             
-            // Update reset information
             document.getElementById('days-remaining').textContent = limits.reset.days_remaining;
             
         } catch (error) {
@@ -472,7 +425,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // User info functionality
     async function updateUserInfo() {
         try {
             const userInfo = await getUserInfo();
@@ -480,11 +432,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const accountLoggedOut = document.getElementById('account-logged-out');
             
             if (userInfo.authenticated) {
-                // User is logged in
                 accountLoggedIn.style.display = 'block';
                 accountLoggedOut.style.display = 'none';
                 
-                // Update user profile
                 const userName = document.getElementById('user-name');
                 const userEmail = document.getElementById('user-email');
                 const userProvider = document.getElementById('user-provider');
@@ -497,11 +447,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (userInfo.user.profile_pic) {
                     userAvatar.src = userInfo.user.profile_pic;
                 } else {
-                    // Default avatar if none provided
                     userAvatar.src = "user-icon.svg";
                 }
             } else {
-                // User is not logged in
                 accountLoggedIn.style.display = 'none';
                 accountLoggedOut.style.display = 'block';
             }
@@ -510,7 +458,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Update rate limits and user info every 60 seconds if modal is open
     setInterval(() => {
         if (settingsModal.classList.contains('open')) {
             updateRateLimits();
@@ -518,8 +465,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }, 60000);
 
-    // Add after existing modal code
-    // Settings functionality
     const highlightToggle = document.getElementById('highlight-toggle');
     highlightToggle.addEventListener('change', function() {
         highlightEnabled = this.checked;
@@ -533,10 +478,8 @@ document.addEventListener('DOMContentLoaded', function() {
         updateSendButtonVisibility();
     });
     
-    // Load saved settings on page load
     loadSettings();
     
-    // Fetch user info and rate limits when page loads
     updateUserInfo();
     updateRateLimits();
 });

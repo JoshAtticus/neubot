@@ -95,7 +95,7 @@ h1 {
 #query-input {
     flex: 1;
     padding: 15px 20px;
-    padding-right: 50px; /* Make space for the button */
+    padding-right: 50px;
     font-size: 16px;
     background-color: #2a2a2a;
     border: none;
@@ -117,7 +117,7 @@ h1 {
 
 #send-button {
     position: absolute;
-    right: 10px; /* Position inside the input box */
+    right: 10px;
     padding: 8px;
     background: #3498db;
     color: white;
@@ -159,15 +159,15 @@ h1 {
 }
 
 .query-indicator {
-    color: #a78bfa; /* Purple */
+    color: #a78bfa; 
 }
 
 .tool-reference {
-    color: #ef4444; /* Red */
+    color: #ef4444;
 }
 
 .attribute {
-    color: #eab308; /* Yellow */
+    color: #eab308;
 }
 
 .response-container, .thinking-container {
@@ -277,7 +277,6 @@ h2 {
     padding-left: 20px;
 }
 
-/* Message styles */
 .message {
     display: flex;
     margin-bottom: 24px;
@@ -289,7 +288,6 @@ h2 {
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* Add this after the fadeIn animation */
 @keyframes sendMessage {
     0% { transform: translateY(20px); opacity: 0; }
     100% { transform: translateY(0); opacity: 1; }
@@ -345,7 +343,6 @@ h2 {
     line-height: 1.4;
 }
 
-/* Scrollbar styling */
 .chat-container::-webkit-scrollbar {
     width: 6px;
 }
@@ -478,7 +475,6 @@ h2 {
     border-left: 4px solid #e74c3c;
 }
 
-/* Modal styles */
 .modal {
     display: none;
     position: fixed;
@@ -576,7 +572,7 @@ h2 {
     background: #2d3748;
     color: #fff;
     border-left: 4px solid #3498db;
-    padding-left: 16px; /* Slightly indent when active */
+    padding-left: 16px; 
 }
 
 .modal-main {
@@ -585,7 +581,6 @@ h2 {
     overflow-y: auto;
 }
 
-/* Rate Limits Panel */
 .rate-limits-container {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -631,7 +626,6 @@ h2 {
     font-size: 14px;
 }
 
-/* Panel visibility */
 .panel {
     opacity: 0;
     transform: translateX(10px);
@@ -692,7 +686,6 @@ h2 {
     margin: 0;
 }
 
-/* Settings panels */
 .settings-group {
     background: #2a2a2a;
     border-radius: 8px;
@@ -728,7 +721,6 @@ h2 {
     font-size: 14px;
 }
 
-/* Toggle Switch */
 .toggle-switch {
     position: relative;
     display: inline-block;
@@ -779,7 +771,6 @@ input:focus + .toggle-slider {
     box-shadow: 0 0 1px #3498db;
 }
 
-/* Account section styles */
 .account-message {
     background: #2a2a2a;
     border-radius: 8px;
@@ -892,7 +883,6 @@ input:focus + .toggle-slider {
     line-height: 1.5;
 }
 
-/* Responsive styles */
 @media (max-width: 768px) {
     .modal-content {
         width: 95%;
