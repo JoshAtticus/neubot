@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>neubot</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" crossorigin="anonymous">
+</head>
+
+<body>
+    <div class="container">
+        <h1>neubot</h1>
+
+        <div class="chat-container" id="chat-container">
+            <!-- Messages will be inserted here -->
+        </div>
+
+        <div class="input-area">
+            <div class="avatar">
+                <img src="user-icon.svg" alt="User">
+            </div>
+            <input type="text" id="query-input" placeholder="type something to neubot...">
+            <button id="send-button"><i class="fas fa-paper-plane"></i></button>
+        </div>
+
+        <div id="thinking-process"></div>
+
+        <div id="settings-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-sidebar">
+                    <div class="sidebar-header">
+                        <h2>Settings</h2>
+                        <button class="close-modal">&times;</button>
+                    </div>
+                    <div class="sidebar-items">
+                        <div class="sidebar-item active" data-panel="general">General</div>
+                        <div class="sidebar-item" data-panel="rate-limits">Rate Limits</div>
+                        <div class="sidebar-item" data-panel="about">About</div>
+                    </div>
+                </div>
+                <div class="modal-main">
+                    <div class="panel active" id="general-panel">
+                        <h3>General Settings</h3>
+                        <div class="settings-group">
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <h4>Query Highlighting</h4>
+                                    <p>Highlight different parts of your query to show detected elements</p>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="highlight-toggle">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <h4>Show Send Button</h4>
+                                    <p>Display a send button next to the input field</p>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="send-button-toggle">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="panel" id="rate-limits-panel">
+                        <h3>Rate Limits</h3>
+                        <div class="reset-info">
+                            <p>Your limits will reset in <span id="days-remaining">-</span> day(s). Limits do not roll over, any remaining queries at the end of the month will be discarded.</p>
+                        </div>
+                        <div class="rate-limit-card">
+                            <h4>Total Queries</h4>
+                            <div class="progress-bar">
+                                <div class="progress" id="total-progress"></div>
+                            </div>
+                            <div class="limit-stats">
+                                <span id="total-used">0</span> / <span id="total-limit">500</span> requests
+                            </div>
+                            <div class="limit-remaining">
+                                <span id="total-remaining">500</span> remaining this month
+                            </div>
+                        </div>
+                        <div class="rate-limits-container">
+                            <div class="rate-limit-card">
+                                <h4>Search</h4>
+                                <div class="progress-bar">
+                                    <div class="progress" id="search-progress"></div>
+                                </div>
+                                <div class="limit-stats">
+                                    <span id="search-used">0</span> / <span id="search-limit">50</span> requests
+                                </div>
+                                <div class="limit-remaining">
+                                    <span id="search-remaining">50</span> remaining this month
+                                </div>
+                            </div>
+                            <div class="rate-limit-card">
+                                <h4>Weather</h4>
+                                <div class="progress-bar">
+                                    <div class="progress" id="weather-progress"></div>
+                                </div>
+                                <div class="limit-stats">
+                                    <span id="weather-used">0</span> / <span id="weather-limit">30</span> requests
+                                </div>
+                                <div class="limit-remaining">
+                                    <span id="weather-remaining">30</span> remaining this month
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="panel" id="about-panel">
+                        <h1>neubot</h1>
+                        <div class="about-content">
+                            <div class="about-section">
+                                <h4>Version</h4>
+                                <p>1.0.0</p>
+                            </div>
+                            <div class="about-section">
+                                <h4>Data sources</h4>
+                                <ul class="credits-list">
+                                    <li>Weather data provided by OpenWeather</li>
+                                    <li>Search results powered by Brave Search</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
