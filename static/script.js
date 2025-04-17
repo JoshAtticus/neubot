@@ -3,10 +3,17 @@ document.addEventListener('DOMContentLoaded', function() {
     const chatContainer = document.getElementById('chat-container');
     const thinkingProcess = document.getElementById('thinking-process');
     const sendButton = document.getElementById('send-button');
+    const signInBanner = document.getElementById('sign-in-banner');
+    const closeBannerBtn = document.getElementById('close-banner');
+    const userProfileImg = document.getElementById('user-profile-img');
     
     let activeDetailsToggle = null;
     let highlightEnabled = false;
     let sendButtonEnabled = false;
+    let isUserAuthenticated = false;
+    
+    // Initialize banner visibility based on localStorage
+    const bannerDismissed = localStorage.getItem('neubot_banner_dismissed') === 'true';
     
     function loadSettings() {
         const savedHighlight = localStorage.getItem('neubot_highlight_enabled');
@@ -110,9 +117,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const messageDiv = document.createElement('div');
         messageDiv.className = 'message user';
         
+        // Use the user's profile picture if authenticated
+        const userImgSrc = isUserAuthenticated && userProfileImg.src ? userProfileImg.src : "user-icon.svg";
+        
         messageDiv.innerHTML = `
             <div class="avatar">
-                <img src="user-icon.svg" alt="User">
+                <img src="${userImgSrc}" alt="User">
             </div>
             <div class="message-content">
                 <div class="highlighted-query">${text}</div>
@@ -346,6 +356,16 @@ document.addEventListener('DOMContentLoaded', function() {
         settingsModal.style.display = 'block';
         setTimeout(() => {
             settingsModal.classList.add('open');
+            
+            // Select the account tab by default
+            sidebarItems.forEach(i => i.classList.remove('active'));
+            document.querySelector('.sidebar-item[data-panel="account"]').classList.add('active');
+            
+            document.querySelectorAll('.panel').forEach(p => {
+                p.classList.remove('active');
+            });
+            document.getElementById('account-panel').classList.add('active');
+            
         }, 10); 
         updateRateLimits();
         updateUserInfo();
@@ -430,7 +450,47 @@ document.addEventListener('DOMContentLoaded', function() {
             const userInfo = await getUserInfo();
             const accountLoggedIn = document.getElementById('account-logged-in');
             const accountLoggedOut = document.getElementById('account-logged-out');
+            const sidebarAvatarImg = document.getElementById('sidebar-avatar-img');
+            const sidebarAccountName = document.getElementById('sidebar-account-name');
+            const sidebarAccountEmail = document.getElementById('sidebar-account-email');
             
+            // Update authentication state
+            isUserAuthenticated = userInfo.authenticated;
+            
+            // Handle user profile image in the chat interface
+            if (userProfileImg) {
+                if (isUserAuthenticated && userInfo.user.profile_pic) {
+                    userProfileImg.src = userInfo.user.profile_pic;
+                    userProfileImg.alt = userInfo.user.name || "User";
+                } else {
+                    userProfileImg.src = "user-icon.svg";
+                    userProfileImg.alt = "User";
+                }
+            }
+            
+            // Handle sign-in banner visibility for non-authenticated users
+            if (signInBanner) {
+                if (!isUserAuthenticated && !bannerDismissed) {
+                    signInBanner.style.display = 'flex';
+                } else {
+                    signInBanner.style.display = 'none';
+                }
+            }
+            
+            // Update sidebar account display
+            if (sidebarAvatarImg && sidebarAccountName && sidebarAccountEmail) {
+                if (isUserAuthenticated && userInfo.user) {
+                    sidebarAvatarImg.src = userInfo.user.profile_pic || "user-icon.svg";
+                    sidebarAccountName.textContent = userInfo.user.name || "User";
+                    sidebarAccountEmail.textContent = userInfo.user.email || "";
+                } else {
+                    sidebarAvatarImg.src = "user-icon.svg";
+                    sidebarAccountName.textContent = "Account";
+                    sidebarAccountEmail.textContent = "Sign in for increased limits";
+                }
+            }
+            
+            // Update user info in settings panel
             if (userInfo.authenticated) {
                 accountLoggedIn.style.display = 'block';
                 accountLoggedOut.style.display = 'none';
@@ -477,6 +537,14 @@ document.addEventListener('DOMContentLoaded', function() {
         localStorage.setItem('neubot_send_button_enabled', sendButtonEnabled);
         updateSendButtonVisibility();
     });
+    
+    // Handle sign-in banner close button
+    if (closeBannerBtn) {
+        closeBannerBtn.addEventListener('click', function() {
+            signInBanner.style.display = 'none';
+            localStorage.setItem('neubot_banner_dismissed', 'true');
+        });
+    }
     
     loadSettings();
     

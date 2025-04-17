@@ -395,7 +395,27 @@ class SemanticParser:
             "show": "command_query",
             "find": "command_query",
             "get": "command_query",
+            "hello": "greeting_query",
+            "hi": "greeting_query",
+            "hey": "greeting_query",
+            "greetings": "greeting_query",
+            "g'day": "greeting_query",
+            "howdy": "greeting_query",
         }
+        
+        self.greeting_phrases = [
+            "hello", "hi", "hey", "howdy", "g'day", "greetings", 
+            "good morning", "good afternoon", "good evening"
+        ]
+        
+        self.greeting_responses = [
+            "Hello to you too!",
+            "Hi there!",
+            "Hey!",
+            "Nice to see you!",
+            "Greetings!",
+            "Hello!"
+        ]
         
         self.known_tools = {
             "time": self._get_time,
@@ -562,9 +582,18 @@ class SemanticParser:
         return f"Today's date is {current_date}."
     
     def _get_day(self, entities: Dict[str, Any]) -> str:
-        """Get the current day of week"""
+        """Get the current day of week or tomorrow's day"""
         self._add_thought("Executing day tool", None)
-        current_day = datetime.datetime.now().strftime("%A")
+
+        date_spec = entities.get("date", "today")
+        self._add_thought("Date specification", date_spec)
+        
+        if date_spec == "tomorrow":
+            tomorrow = datetime.now() + timedelta(days=1)
+            day_name = tomorrow.strftime("%A")
+            return f"Tomorrow will be {day_name}."
+        else:
+            current_day = datetime.now().strftime("%A")
         return f"Today is {current_day}."
     
     def _get_weather(self, entities: Dict[str, Any]) -> str:
@@ -652,10 +681,31 @@ class SemanticParser:
         self._add_thought("Received query", query)
         self._add_thought("User timezone", user_timezone)
         
+        query_lower = query.lower().strip("!?.,")
+        contains_greeting = False
+        greeting_only = False
+        
+        self._add_thought("Checking for greetings", None)
+        for greeting in self.greeting_phrases:
+            if greeting in query_lower or query_lower.startswith(greeting):
+                contains_greeting = True
+                self._add_thought("Found greeting in query", greeting)
+                if len(query_lower.split()) <= 2 or query_lower in self.greeting_phrases:
+                    greeting_only = True
+                    self._add_thought("Query is greeting only", True)
+                break
+                
         tokens = query.split()
         self._add_thought("Tokenized query", tokens)
         
         query_type = self._extract_query_type(tokens)
+        
+        if greeting_only:
+            import random
+            greeting_response = random.choice(self.greeting_responses)
+            greeting_response += " How can I help you?"
+            self._add_thought("Responding with greeting only", greeting_response)
+            return greeting_response, self.thoughts, None
         
         tools = self._identify_tools(tokens)
         
@@ -704,6 +754,12 @@ class SemanticParser:
                 final_response = "I understood your query but couldn't find the right tool to help."
         else:
             final_response = "I'm sorry, I don't understand what you're asking for."
+        
+        if contains_greeting and not greeting_only:
+            import random
+            greeting_response = random.choice(self.greeting_responses) + " "
+            final_response = greeting_response + final_response
+            self._add_thought("Added greeting to response", greeting_response)
         
         self._add_thought("Generated final response", final_response)
         return final_response, self.thoughts, extracted_location

@@ -7,6 +7,7 @@
     <title>neubot</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" crossorigin="anonymous">
+    <link rel="icon" href="neubot-icon.svg" type="image/svg+xml">
 </head>
 
 <body>
@@ -16,9 +17,18 @@
         <div class="chat-container" id="chat-container">
         </div>
 
+        <!-- Add sign-in banner above input area -->
+        <div class="sign-in-banner" id="sign-in-banner">
+            <span>Sign in to get more queries per month and enhanced features</span>
+            <div class="banner-actions">
+                <a href="/login">Sign in</a>
+                <button id="close-banner" class="close-banner">×</button>
+            </div>
+        </div>
+
         <div class="input-area">
-            <div class="avatar">
-                <img src="user-icon.svg" alt="User">
+            <div class="avatar" id="user-avatar-container">
+                <img src="user-icon.svg" alt="User" id="user-profile-img">
             </div>
             <input type="text" id="query-input" placeholder="type something to neubot...">
             <button id="send-button"><i class="fas fa-paper-plane"></i></button>
@@ -34,8 +44,18 @@
                         <button class="close-modal">&times;</button>
                     </div>
                     <div class="sidebar-items">
+                        <div class="sidebar-item account-item" data-panel="account">
+                            <div class="sidebar-account-preview">
+                                <div class="sidebar-avatar">
+                                    <img src="user-icon.svg" alt="User" id="sidebar-avatar-img">
+                                </div>
+                                <div class="sidebar-account-info">
+                                    <div class="sidebar-account-name" id="sidebar-account-name">Account</div>
+                                    <div class="sidebar-account-email" id="sidebar-account-email">Sign in for increased limits</div>
+                                </div>
+                            </div>
+                        </div>
                         <div class="sidebar-item active" data-panel="general">General</div>
-                        <div class="sidebar-item" data-panel="account">Account</div>
                         <div class="sidebar-item" data-panel="about">About</div>
                     </div>
                 </div>
@@ -68,28 +88,29 @@
                     </div>
                     
                     <div class="panel" id="account-panel">
-                        <h3>Account</h3>
-                        <div id="account-logged-out" style="display: none;">
-                            <div class="account-message">
-                                <p>Sign in to unlock higher rate limits and more features.</p>
-                                <div class="account-actions">
+                        <div id="account-logged-out" style="display: none;" class="account-big-display">
+                            <div class="account-header">
+                                <div class="user-avatar large">
+                                    <img src="user-icon.svg" alt="Default User" class="default-avatar">
+                                </div>
+                                <div class="user-details">
+                                    <h3>Account</h3>
+                                    <p class="account-status">Sign in for increased rate limits and enhanced features</p>
                                     <a href="/login" class="login-button">Sign in</a>
                                 </div>
                             </div>
                         </div>
                         
-                        <div id="account-logged-in" style="display: none;">
-                            <div class="account-info">
-                                <div class="user-profile">
-                                    <div class="user-avatar">
-                                        <img id="user-avatar" src="" alt="User avatar">
-                                    </div>
-                                    <div class="user-details">
-                                        <h4 id="user-name"></h4>
-                                        <p id="user-email"></p>
-                                        <p id="user-provider"></p>
-                                        <a href="/logout" class="logout-button">Sign out</a>
-                                    </div>
+                        <div id="account-logged-in" style="display: none;" class="account-big-display">
+                            <div class="account-header">
+                                <div class="user-avatar large">
+                                    <img id="user-avatar" src="" alt="User avatar">
+                                </div>
+                                <div class="user-details">
+                                    <h3 id="user-name"></h3>
+                                    <p id="user-email"></p>
+                                    <p id="user-provider"></p>
+                                    <a href="/logout" class="logout-button">Sign out</a>
                                 </div>
                             </div>
                         </div>
