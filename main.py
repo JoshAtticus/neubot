@@ -990,7 +990,10 @@ def login_github():
 def auth_google():
     """Handle Google OAuth callback"""
     token = oauth.google.authorize_access_token()
-    user_info = oauth.google.parse_id_token(token)
+    
+    # Fix: Use the full URL for the userinfo endpoint
+    resp = oauth.google.get('https://www.googleapis.com/oauth2/v3/userinfo')
+    user_info = resp.json()
     
     user_id = f"google_{user_info['sub']}"
     
