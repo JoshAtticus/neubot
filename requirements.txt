@@ -7,3 +7,5 @@ requests
 flask-login
 authlib
 requests-oauthlib
+spotipy
+flask-wtf

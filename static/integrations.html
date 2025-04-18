@@ -1,0 +1,553 @@
+<!-- filepath: c:\Users\josha\Repos\Tests\neubot\static\integrations.html -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Integrations - neubot</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" crossorigin="anonymous">
+    <link rel="icon" href="neubot-icon.svg" type="image/svg+xml">
+    <style>
+        .integrations-container {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        
+        .integration-card {
+            background-color: #232323;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .integration-logo {
+            width: 70px;
+            height: 70px;
+            margin-right: 25px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            background-color: #333;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .integration-logo img {
+            max-width: 80%;
+            max-height: 80%;
+        }
+        
+        .integration-details {
+            flex: 1;
+        }
+        
+        .integration-name {
+            font-size: 24px;
+            margin: 0 0 5px 0;
+            font-weight: 700;
+        }
+        
+        .integration-description {
+            color: #aaa;
+            margin: 0 0 15px 0;
+            font-size: 15px;
+            line-height: 1.4;
+        }
+        
+        .integration-status {
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+        
+        .status-connected {
+            background-color: #4ade80;
+        }
+        
+        .status-disconnected {
+            background-color: #ef4444;
+        }
+        
+        .integration-buttons {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: 500;
+            border: none;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-connect {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        .btn-connect:hover {
+            background-color: #2980b9;
+        }
+        
+        .btn-disconnect {
+            background-color: #2a2a2a;
+            color: #ef4444;
+            border: 1px solid #ef4444;
+        }
+        
+        .btn-disconnect:hover {
+            background-color: rgba(239, 68, 68, 0.1);
+        }
+        
+        .btn-disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-back {
+            display: inline-flex;
+            align-items: center;
+            color: #888;
+            text-decoration: none;
+            margin-bottom: 20px;
+            transition: color 0.2s;
+        }
+        
+        .btn-back:hover {
+            color: #fff;
+        }
+        
+        .btn-back i {
+            margin-right: 8px;
+        }
+
+        .now-playing {
+            margin-top: 15px;
+            background-color: #2a2a2a;
+            border-radius: 8px;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            max-width: 500px;
+        }
+        
+        .album-art {
+            width: 60px;
+            height: 60px;
+            margin-right: 15px;
+            border-radius: 6px;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+        
+        .album-art img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .track-info {
+            flex: 1;
+            min-width: 0; /* Important for text overflow to work */
+        }
+        
+        .track-name {
+            font-weight: 600;
+            font-size: 16px;
+            margin: 0 0 5px 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .track-artist {
+            color: #bbb;
+            font-size: 14px;
+            margin: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .playback-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 10px;
+        }
+        
+        .control-btn {
+            background: none;
+            border: none;
+            color: #bbb;
+            cursor: pointer;
+            padding: 5px;
+            transition: all 0.2s;
+        }
+        
+        .control-btn:hover {
+            color: #fff;
+            transform: scale(1.1);
+        }
+        
+        .control-btn.play-pause {
+            color: #3498db;
+            font-size: 18px;
+        }
+        
+        .device-info {
+            font-size: 12px;
+            color: #777;
+            margin-top: 5px;
+        }
+
+        #loading {
+            color: #888;
+            margin: 20px 0;
+        }
+
+        #error-message {
+            color: #ef4444;
+            margin: 20px 0;
+            padding: 10px;
+            background-color: rgba(239, 68, 68, 0.1);
+            border-radius: 6px;
+            display: none;
+        }
+
+        .integration-features {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #888;
+        }
+
+        .feature-list {
+            padding-left: 20px;
+            margin: 5px 0;
+            color: #bbb;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="integrations-container">
+        <a href="/" class="btn-back"><i class="fas fa-arrow-left"></i> Back to neubot</a>
+        <h1>Integrations</h1>
+        <p class="subtitle">Connect your services to enhance neubot's capabilities</p>
+        
+        <div id="loading">Loading integrations...</div>
+        <div id="error-message"></div>
+        
+        <div class="integration-card" id="spotify-card" style="display:none">
+            <div class="integration-logo">
+                <img src="https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_Green.png" alt="Spotify Logo">
+            </div>
+            <div class="integration-details">
+                <h3 class="integration-name">Spotify</h3>
+                <p class="integration-description">Control your Spotify music playback and see what's currently playing. Some features may require a premium subscription.</p>
+                
+                <div class="integration-status">
+                    <span class="status-indicator status-disconnected" id="spotify-status-indicator"></span>
+                    <span id="spotify-status">Not connected</span>
+                </div>
+                
+                <div class="integration-features">
+                    <p>You can ask neubot to:</p>
+                    <ul class="feature-list">
+                        <li>Play or pause your music</li>
+                        <li>Skip to next or previous track</li>
+                        <li>Show what's currently playing</li>
+                    </ul>
+                </div>
+                
+                <div id="now-playing-container" style="display:none">
+                    <div class="now-playing">
+                        <div class="album-art">
+                            <img id="album-art-img" src="" alt="Album Art">
+                        </div>
+                        <div class="track-info">
+                            <p class="track-name" id="track-name"></p>
+                            <p class="track-artist" id="track-artist"></p>
+                            <div class="playback-controls">
+                                <button class="control-btn" id="prev-btn">
+                                    <i class="fas fa-step-backward"></i>
+                                </button>
+                                <button class="control-btn play-pause" id="play-pause-btn">
+                                    <i class="fas fa-play" id="play-pause-icon"></i>
+                                </button>
+                                <button class="control-btn" id="next-btn">
+                                    <i class="fas fa-step-forward"></i>
+                                </button>
+                            </div>
+                            <div class="device-info" id="device-info"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="integration-buttons" id="spotify-buttons">
+                    <button class="btn btn-connect" id="spotify-connect-btn">Connect Spotify</button>
+                    <button class="btn btn-disconnect" id="spotify-disconnect-btn" style="display:none">Disconnect</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const loadingElement = document.getElementById('loading');
+            const errorMessageElement = document.getElementById('error-message');
+            const spotifyCard = document.getElementById('spotify-card');
+            const spotifyStatusIndicator = document.getElementById('spotify-status-indicator');
+            const spotifyStatus = document.getElementById('spotify-status');
+            const spotifyConnectBtn = document.getElementById('spotify-connect-btn');
+            const spotifyDisconnectBtn = document.getElementById('spotify-disconnect-btn');
+            const nowPlayingContainer = document.getElementById('now-playing-container');
+            const trackName = document.getElementById('track-name');
+            const trackArtist = document.getElementById('track-artist');
+            const albumArtImg = document.getElementById('album-art-img');
+            const playPauseBtn = document.getElementById('play-pause-btn');
+            const playPauseIcon = document.getElementById('play-pause-icon');
+            const prevBtn = document.getElementById('prev-btn');
+            const nextBtn = document.getElementById('next-btn');
+            const deviceInfo = document.getElementById('device-info');
+            
+            let isPlaying = false;
+            let nowPlayingInterval;
+            
+            // Check user authentication first
+            fetch('/api/user')
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.authenticated) {
+                        window.location.href = '/login';
+                        return;
+                    }
+                    
+                    // User is authenticated, load integrations
+                    loadSpotifyIntegration();
+                })
+                .catch(error => {
+                    console.error('Error checking authentication:', error);
+                    showError('Failed to verify authentication. Please try again.');
+                });
+            
+            function loadSpotifyIntegration() {
+                fetch('/api/integrations/spotify/status')
+                    .then(response => response.json())
+                    .then(data => {
+                        loadingElement.style.display = 'none';
+                        spotifyCard.style.display = 'flex';
+                        
+                        if (data.linked) {
+                            spotifyStatusIndicator.className = 'status-indicator status-connected';
+                            spotifyStatus.textContent = data.message;
+                            spotifyConnectBtn.style.display = 'none';
+                            spotifyDisconnectBtn.style.display = 'inline-block';
+                            
+                            // Check if there's active playback
+                            if (data.active) {
+                                loadNowPlaying();
+                                startNowPlayingUpdates();
+                            }
+                        } else {
+                            spotifyStatusIndicator.className = 'status-indicator status-disconnected';
+                            spotifyStatus.textContent = data.message;
+                            spotifyConnectBtn.style.display = 'inline-block';
+                            spotifyDisconnectBtn.style.display = 'none';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading Spotify integration:', error);
+                        loadingElement.style.display = 'none';
+                        showError('Failed to load Spotify integration status. Please try refreshing the page.');
+                    });
+            }
+            
+            function loadNowPlaying() {
+                fetch('/api/integrations/spotify/now-playing')
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        nowPlayingContainer.style.display = 'block';
+                        trackName.textContent = data.track_name;
+                        trackArtist.textContent = data.artist;
+                        
+                        if (data.album_art) {
+                            albumArtImg.src = data.album_art;
+                        } else {
+                            albumArtImg.src = 'https://via.placeholder.com/60?text=No+Image';
+                        }
+                        
+                        isPlaying = data.is_playing;
+                        updatePlayPauseButton();
+                        
+                        if (data.device) {
+                            deviceInfo.textContent = `Playing on: ${data.device}`;
+                        } else {
+                            deviceInfo.textContent = '';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading now playing:', error);
+                        nowPlayingContainer.style.display = 'none';
+                    });
+            }
+            
+            function startNowPlayingUpdates() {
+                // Clear any existing interval
+                if (nowPlayingInterval) {
+                    clearInterval(nowPlayingInterval);
+                }
+                
+                // Update now playing info every 5 seconds
+                nowPlayingInterval = setInterval(loadNowPlaying, 5000);
+            }
+            
+            function updatePlayPauseButton() {
+                if (isPlaying) {
+                    playPauseIcon.className = 'fas fa-pause';
+                } else {
+                    playPauseIcon.className = 'fas fa-play';
+                }
+            }
+            
+            function showError(message) {
+                errorMessageElement.textContent = message;
+                errorMessageElement.style.display = 'block';
+            }
+            
+            // Control button event listeners
+            spotifyConnectBtn.addEventListener('click', function() {
+                window.location.href = '/login/spotify';
+            });
+            
+            spotifyDisconnectBtn.addEventListener('click', function() {
+                const confirmedDisconnect = confirm('Are you sure you want to disconnect Spotify? You will need to reconnect to use Spotify features.');
+                
+                if (confirmedDisconnect) {
+                    fetch('/api/integrations/spotify/disconnect', {
+                        method: 'POST'
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            spotifyStatusIndicator.className = 'status-indicator status-disconnected';
+                            spotifyStatus.textContent = 'Not connected';
+                            spotifyConnectBtn.style.display = 'inline-block';
+                            spotifyDisconnectBtn.style.display = 'none';
+                            nowPlayingContainer.style.display = 'none';
+                            
+                            if (nowPlayingInterval) {
+                                clearInterval(nowPlayingInterval);
+                                nowPlayingInterval = null;
+                            }
+                        } else {
+                            showError('Failed to disconnect Spotify: ' + data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error disconnecting Spotify:', error);
+                        showError('Failed to disconnect Spotify. Please try again.');
+                    });
+                }
+            });
+            
+            playPauseBtn.addEventListener('click', function() {
+                const action = isPlaying ? 'pause' : 'play';
+                
+                fetch('/api/integrations/spotify/control', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ action: action })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        isPlaying = !isPlaying;
+                        updatePlayPauseButton();
+                        
+                        // Force an immediate refresh of now playing
+                        setTimeout(loadNowPlaying, 500);
+                    } else {
+                        showError('Failed to control playback: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error controlling playback:', error);
+                    showError('Failed to control playback. Please try again.');
+                });
+            });
+            
+            prevBtn.addEventListener('click', function() {
+                fetch('/api/integrations/spotify/control', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ action: 'previous' })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Force an immediate refresh of now playing
+                        setTimeout(loadNowPlaying, 1000);
+                    } else {
+                        showError('Failed to go to previous track: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error going to previous track:', error);
+                    showError('Failed to go to previous track. Please try again.');
+                });
+            });
+            
+            nextBtn.addEventListener('click', function() {
+                fetch('/api/integrations/spotify/control', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ action: 'next' })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Force an immediate refresh of now playing
+                        setTimeout(loadNowPlaying, 1000);
+                    } else {
+                        showError('Failed to skip to next track: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error skipping to next track:', error);
+                    showError('Failed to skip to next track. Please try again.');
+                });
+            });
+        });
+    </script>
+</body>
+
+</html>

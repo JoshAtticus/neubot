@@ -17,8 +17,11 @@ from datetime import datetime, timedelta
 import time
 import uuid
 import secrets
+import spotipy
+from spotipy.oauth2 import SpotifyOAuth, CacheHandler
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from authlib.integrations.flask_client import OAuth
+import contextlib
 
 load_dotenv()
 
@@ -28,6 +31,9 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "")
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "")
+SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID", "")
+SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET", "")
+SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://localhost:5300/auth/spotify/callback")
 SECRET_KEY = os.getenv("SECRET_KEY", secrets.token_hex(16))
 
 DEFAULT_TIMEZONE = "America/New_York"
@@ -39,6 +45,12 @@ GUEST_TOTAL_QUERY_LIMIT = 50  # total requests per month for non-logged-in users
 USER_WEATHER_RATE_LIMIT = 30  # requests per month for logged-in users
 USER_SEARCH_RATE_LIMIT = 50   # requests per month for logged-in users
 USER_TOTAL_QUERY_LIMIT = 500  # total requests per month for logged-in users
+
+SPOTIFY_SCOPES = [
+    "user-read-playback-state", 
+    "user-modify-playback-state", 
+    "user-read-currently-playing"
+]
 
 DB_FILE = "neubot.db"
 
@@ -58,47 +70,158 @@ class User(UserMixin):
         
     @staticmethod
     def get(user_id):
-        conn = sqlite3.connect(DB_FILE)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT * FROM users WHERE id=?", (user_id,))
-        user_data = cursor.fetchone()
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT * FROM users WHERE id=?", (user_id,))
+            user_data = cursor.fetchone()
+            
+            if user_data:
+                return User(
+                    id=user_data['id'],
+                    name=user_data['name'],
+                    email=user_data['email'],
+                    provider=user_data['provider'],
+                    profile_pic=user_data['profile_pic']
+                )
+            return None
+
+@contextlib.contextmanager
+def get_db_connection():
+    """Context manager for SQLite database connections"""
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+    finally:
         conn.close()
-        
-        if user_data:
-            return User(
-                id=user_data['id'],
-                name=user_data['name'],
-                email=user_data['email'],
-                provider=user_data['provider'],
-                profile_pic=user_data['profile_pic']
-            )
-        return None
 
 def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
+    """Initialize the database with required tables"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            email TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            profile_pic TEXT
+        )
+        ''')
+        
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS spotify_tokens (
+            user_id TEXT PRIMARY KEY,
+            access_token TEXT NOT NULL,
+            refresh_token TEXT NOT NULL,
+            expires_at INTEGER NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+        ''')
+        
+        cursor.execute("PRAGMA table_info(requests)")
+        columns = cursor.fetchall()
+        column_names = [column[1] for column in columns]
+        
+        if 'user_id' not in column_names:
+            cursor.execute('ALTER TABLE requests ADD COLUMN user_id TEXT')
+        
+        conn.commit()
+
+class DatabaseCacheHandler(CacheHandler):
+    """Custom cache handler that stores tokens in the database instead of the filesystem"""
     
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        email TEXT NOT NULL,
-        provider TEXT NOT NULL,
-        profile_pic TEXT
-    )
-    ''')
+    def __init__(self, user_id=None):
+        self.user_id = user_id
     
-    cursor.execute("PRAGMA table_info(requests)")
-    columns = cursor.fetchall()
-    column_names = [column[1] for column in columns]
+    def get_cached_token(self):
+        """Get token from database"""
+        if not self.user_id:
+            return None
+            
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT * FROM spotify_tokens WHERE user_id=?", (self.user_id,))
+            token_data = cursor.fetchone()
+            
+            if not token_data:
+                return None
+                
+            return {
+                "access_token": token_data["access_token"],
+                "refresh_token": token_data["refresh_token"],
+                "expires_at": token_data["expires_at"],
+                "token_type": "Bearer",
+                "scope": " ".join(SPOTIFY_SCOPES)
+            }
     
-    if 'user_id' not in column_names:
-        cursor.execute('ALTER TABLE requests ADD COLUMN user_id TEXT')
+    def save_token_to_cache(self, token_info):
+        """Save token to database"""
+        if not self.user_id:
+            return
+            
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO spotify_tokens 
+                (user_id, access_token, refresh_token, expires_at) 
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    self.user_id,
+                    token_info["access_token"],
+                    token_info["refresh_token"],
+                    token_info["expires_at"]
+                )
+            )
+            
+            conn.commit()
+
+def get_spotify_client(user_id=None):
+    """
+    Get a configured Spotipy client for a user or the app
+    """
+    if not user_id:
+        auth_manager = SpotifyOAuth(
+            client_id=SPOTIFY_CLIENT_ID,
+            client_secret=SPOTIFY_CLIENT_SECRET,
+            redirect_uri=SPOTIFY_REDIRECT_URI,
+            scope=' '.join(SPOTIFY_SCOPES),
+            cache_handler=DatabaseCacheHandler()
+        )
+        return spotipy.Spotify(auth_manager=auth_manager)
     
-    conn.commit()
-    conn.close()
+    cache_handler = DatabaseCacheHandler(user_id)
+    token_info = cache_handler.get_cached_token()
+    
+    if not token_info:
+        return None
+    
+    now = int(time.time())
+    
+    if token_info['expires_at'] < now:
+        auth_manager = SpotifyOAuth(
+            client_id=SPOTIFY_CLIENT_ID,
+            client_secret=SPOTIFY_CLIENT_SECRET,
+            redirect_uri=SPOTIFY_REDIRECT_URI,
+            scope=' '.join(SPOTIFY_SCOPES),
+            cache_handler=cache_handler
+        )
+        
+        try:
+            new_token = auth_manager.refresh_access_token(token_info['refresh_token'])
+            cache_handler.save_token_to_cache(new_token)
+            return spotipy.Spotify(auth=new_token['access_token'])
+        except Exception as e:
+            print(f"Error refreshing token: {str(e)}")
+            return None
+    
+    return spotipy.Spotify(auth=token_info['access_token'])
 
 class RateLimiter:
     def __init__(self):
@@ -106,160 +229,154 @@ class RateLimiter:
         
     def _init_db(self):
         """Initialize SQLite database and create tables if they don't exist"""
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS requests (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ip TEXT NOT NULL,
-            req_type TEXT NOT NULL,
-            timestamp DATETIME NOT NULL,
-            user_id TEXT
-        )
-        ''')
-        
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS reset_dates (
-            ip TEXT PRIMARY KEY,
-            reset_date DATETIME NOT NULL
-        )
-        ''')
-        
-        conn.commit()
-        conn.close()
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ip TEXT NOT NULL,
+                req_type TEXT NOT NULL,
+                timestamp DATETIME NOT NULL,
+                user_id TEXT
+            )
+            ''')
+            
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS reset_dates (
+                ip TEXT PRIMARY KEY,
+                reset_date DATETIME NOT NULL
+            )
+            ''')
+            
+            conn.commit()
     
     def _cleanup_old_requests(self, ip: str, req_type: str, user_id: Optional[str] = None):
         """Remove requests older than 1 month"""
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        
-        now = datetime.now()
-        month_ago = now - timedelta(days=30)
-        month_ago_str = month_ago.strftime("%Y-%m-%d %H:%M:%S")
-        
-        if user_id:
-            cursor.execute('''
-            SELECT COUNT(*) FROM requests 
-            WHERE user_id = ? AND req_type = ? AND timestamp > ?
-            ''', (user_id, req_type, month_ago_str))
-        else:
-            cursor.execute('''
-            SELECT COUNT(*) FROM requests 
-            WHERE ip = ? AND req_type = ? AND timestamp > ? AND user_id IS NULL
-            ''', (ip, req_type, month_ago_str))
-        
-        recent_count = cursor.fetchone()[0]
-        
-        if recent_count == 0:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            now = datetime.now()
+            month_ago = now - timedelta(days=30)
+            month_ago_str = month_ago.strftime("%Y-%m-%d %H:%M:%S")
+            
             if user_id:
                 cursor.execute('''
-                DELETE FROM requests 
-                WHERE user_id = ? AND req_type = ?
-                ''', (user_id, req_type))
+                SELECT COUNT(*) FROM requests 
+                WHERE user_id = ? AND req_type = ? AND timestamp > ?
+                ''', (user_id, req_type, month_ago_str))
             else:
                 cursor.execute('''
-                DELETE FROM requests 
-                WHERE ip = ? AND req_type = ? AND user_id IS NULL
-                ''', (ip, req_type))
+                SELECT COUNT(*) FROM requests 
+                WHERE ip = ? AND req_type = ? AND timestamp > ? AND user_id IS NULL
+                ''', (ip, req_type, month_ago_str))
+            
+            recent_count = cursor.fetchone()[0]
+            
+            if recent_count == 0:
+                if user_id:
+                    cursor.execute('''
+                    DELETE FROM requests 
+                    WHERE user_id = ? AND req_type = ?
+                    ''', (user_id, req_type))
+                else:
+                    cursor.execute('''
+                    DELETE FROM requests 
+                    WHERE ip = ? AND req_type = ? AND user_id IS NULL
+                    ''', (ip, req_type))
+                
+                cursor.execute('''
+                INSERT OR REPLACE INTO reset_dates (ip, reset_date) 
+                VALUES (?, ?)
+                ''', (ip, now.strftime("%Y-%m-%d %H:%M:%S")))
+            else:
+                if user_id:
+                    cursor.execute('''
+                    DELETE FROM requests 
+                    WHERE user_id = ? AND req_type = ? AND timestamp < ?
+                    ''', (user_id, req_type, month_ago_str))
+                else:
+                    cursor.execute('''
+                    DELETE FROM requests 
+                    WHERE ip = ? AND req_type = ? AND timestamp < ? AND user_id IS NULL
+                    ''', (ip, req_type, month_ago_str))
+            
+            conn.commit()
+    
+    def _get_next_reset(self, ip: str) -> datetime:
+        """Get the next reset date for an IP's limits"""
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+            SELECT reset_date FROM reset_dates WHERE ip = ?
+            ''', (ip,))
+            
+            result = cursor.fetchone()
+            
+            if result:
+                last_reset = datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S")
+            else:
+                last_reset = datetime.now()
+                self._save_reset_date(ip, last_reset)
+            
+            return last_reset + timedelta(days=30)
+    
+    def _save_reset_date(self, ip: str, reset_date: datetime):
+        """Save reset date to database"""
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
             
             cursor.execute('''
             INSERT OR REPLACE INTO reset_dates (ip, reset_date) 
             VALUES (?, ?)
-            ''', (ip, now.strftime("%Y-%m-%d %H:%M:%S")))
-        else:
-            if user_id:
-                cursor.execute('''
-                DELETE FROM requests 
-                WHERE user_id = ? AND req_type = ? AND timestamp < ?
-                ''', (user_id, req_type, month_ago_str))
-            else:
-                cursor.execute('''
-                DELETE FROM requests 
-                WHERE ip = ? AND req_type = ? AND timestamp < ? AND user_id IS NULL
-                ''', (ip, req_type, month_ago_str))
-        
-        conn.commit()
-        conn.close()
-    
-    def _get_next_reset(self, ip: str) -> datetime:
-        """Get the next reset date for an IP's limits"""
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-        SELECT reset_date FROM reset_dates WHERE ip = ?
-        ''', (ip,))
-        
-        result = cursor.fetchone()
-        conn.close()
-        
-        if result:
-            last_reset = datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S")
-        else:
-            last_reset = datetime.now()
-            self._save_reset_date(ip, last_reset)
-        
-        return last_reset + timedelta(days=30)
-    
-    def _save_reset_date(self, ip: str, reset_date: datetime):
-        """Save reset date to database"""
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-        INSERT OR REPLACE INTO reset_dates (ip, reset_date) 
-        VALUES (?, ?)
-        ''', (ip, reset_date.strftime("%Y-%m-%d %H:%M:%S")))
-        
-        conn.commit()
-        conn.close()
+            ''', (ip, reset_date.strftime("%Y-%m-%d %H:%M:%S")))
+            
+            conn.commit()
     
     def check_rate_limit(self, ip: str, req_type: str, user_id: Optional[str] = None) -> Tuple[bool, int]:
         """Check if request is within rate limits"""
         self._cleanup_old_requests(ip, req_type, user_id)
         
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        
-        month_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
-        
-        if user_id:
-            search_limit = USER_SEARCH_RATE_LIMIT
-            weather_limit = USER_WEATHER_RATE_LIMIT
-            total_limit = USER_TOTAL_QUERY_LIMIT
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
             
-            if req_type in ["search", "weather"]:
+            month_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+            
+            if user_id:
+                search_limit = USER_SEARCH_RATE_LIMIT
+                weather_limit = USER_WEATHER_RATE_LIMIT
+                total_limit = USER_TOTAL_QUERY_LIMIT
+                
+                if req_type in ["search", "weather"]:
+                    cursor.execute('''
+                    SELECT COUNT(*) FROM requests 
+                    WHERE user_id = ? AND req_type = ? AND timestamp > ?
+                    ''', (user_id, req_type, month_ago))
+                    current_count = cursor.fetchone()[0]
+                
                 cursor.execute('''
                 SELECT COUNT(*) FROM requests 
-                WHERE user_id = ? AND req_type = ? AND timestamp > ?
-                ''', (user_id, req_type, month_ago))
-                current_count = cursor.fetchone()[0]
-            
-            cursor.execute('''
-            SELECT COUNT(*) FROM requests 
-            WHERE user_id = ? AND req_type = 'total' AND timestamp > ?
-            ''', (user_id, month_ago))
-            total_count = cursor.fetchone()[0]
-        else:
-            search_limit = GUEST_SEARCH_RATE_LIMIT
-            weather_limit = GUEST_WEATHER_RATE_LIMIT
-            total_limit = GUEST_TOTAL_QUERY_LIMIT
-            
-            if req_type in ["search", "weather"]:
+                WHERE user_id = ? AND req_type = 'total' AND timestamp > ?
+                ''', (user_id, month_ago))
+                total_count = cursor.fetchone()[0]
+            else:
+                search_limit = GUEST_SEARCH_RATE_LIMIT
+                weather_limit = GUEST_WEATHER_RATE_LIMIT
+                total_limit = GUEST_TOTAL_QUERY_LIMIT
+                
+                if req_type in ["search", "weather"]:
+                    cursor.execute('''
+                    SELECT COUNT(*) FROM requests 
+                    WHERE ip = ? AND req_type = ? AND timestamp > ? AND user_id IS NULL
+                    ''', (ip, req_type, month_ago))
+                    current_count = cursor.fetchone()[0]
+                
                 cursor.execute('''
                 SELECT COUNT(*) FROM requests 
-                WHERE ip = ? AND req_type = ? AND timestamp > ? AND user_id IS NULL
-                ''', (ip, req_type, month_ago))
-                current_count = cursor.fetchone()[0]
-            
-            cursor.execute('''
-            SELECT COUNT(*) FROM requests 
-            WHERE ip = ? AND req_type = 'total' AND timestamp > ? AND user_id IS NULL
-            ''', (ip, month_ago))
-            total_count = cursor.fetchone()[0]
-        
-        conn.close()
+                WHERE ip = ? AND req_type = 'total' AND timestamp > ? AND user_id IS NULL
+                ''', (ip, month_ago))
+                total_count = cursor.fetchone()[0]
         
         if req_type in ["search", "weather"]:
             limit = search_limit if req_type == "search" else weather_limit
@@ -270,24 +387,23 @@ class RateLimiter:
     
     def add_request(self, ip: str, req_type: str, user_id: Optional[str] = None):
         """Record a new request in the database"""
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        cursor.execute('''
-        INSERT INTO requests (ip, req_type, timestamp, user_id)
-        VALUES (?, ?, ?, ?)
-        ''', (ip, req_type, now, user_id))
-        
-        if req_type != "total":
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
             cursor.execute('''
             INSERT INTO requests (ip, req_type, timestamp, user_id)
             VALUES (?, ?, ?, ?)
-            ''', (ip, "total", now, user_id))
-        
-        conn.commit()
-        conn.close()
+            ''', (ip, req_type, now, user_id))
+            
+            if req_type != "total":
+                cursor.execute('''
+                INSERT INTO requests (ip, req_type, timestamp, user_id)
+                VALUES (?, ?, ?, ?)
+                ''', (ip, "total", now, user_id))
+            
+            conn.commit()
     
     def get_limits(self, ip: str, user_id: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
         """Get current rate limit status for a user or IP"""
@@ -295,57 +411,55 @@ class RateLimiter:
         self._cleanup_old_requests(ip, "weather", user_id)
         self._cleanup_old_requests(ip, "total", user_id)
         
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        
-        month_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
-        
-        if user_id:
-            search_limit = USER_SEARCH_RATE_LIMIT
-            weather_limit = USER_WEATHER_RATE_LIMIT
-            total_limit = USER_TOTAL_QUERY_LIMIT
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
             
-            cursor.execute('''
-            SELECT COUNT(*) FROM requests 
-            WHERE user_id = ? AND req_type = 'search' AND timestamp > ?
-            ''', (user_id, month_ago))
-            search_count = cursor.fetchone()[0]
+            month_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
             
-            cursor.execute('''
-            SELECT COUNT(*) FROM requests 
-            WHERE user_id = ? AND req_type = 'weather' AND timestamp > ?
-            ''', (user_id, month_ago))
-            weather_count = cursor.fetchone()[0]
-            
-            cursor.execute('''
-            SELECT COUNT(*) FROM requests 
-            WHERE user_id = ? AND req_type = 'total' AND timestamp > ?
-            ''', (user_id, month_ago))
-            total_count = cursor.fetchone()[0]
-        else:
-            search_limit = GUEST_SEARCH_RATE_LIMIT
-            weather_limit = GUEST_WEATHER_RATE_LIMIT
-            total_limit = GUEST_TOTAL_QUERY_LIMIT
-            
-            cursor.execute('''
-            SELECT COUNT(*) FROM requests 
-            WHERE ip = ? AND req_type = 'search' AND timestamp > ? AND user_id IS NULL
-            ''', (ip, month_ago))
-            search_count = cursor.fetchone()[0]
-            
-            cursor.execute('''
-            SELECT COUNT(*) FROM requests 
-            WHERE ip = ? AND req_type = 'weather' AND timestamp > ? AND user_id IS NULL
-            ''', (ip, month_ago))
-            weather_count = cursor.fetchone()[0]
-            
-            cursor.execute('''
-            SELECT COUNT(*) FROM requests 
-            WHERE ip = ? AND req_type = 'total' AND timestamp > ? AND user_id IS NULL
-            ''', (ip, month_ago))
-            total_count = cursor.fetchone()[0]
-        
-        conn.close()
+            if user_id:
+                search_limit = USER_SEARCH_RATE_LIMIT
+                weather_limit = USER_WEATHER_RATE_LIMIT
+                total_limit = USER_TOTAL_QUERY_LIMIT
+                
+                cursor.execute('''
+                SELECT COUNT(*) FROM requests 
+                WHERE user_id = ? AND req_type = 'search' AND timestamp > ?
+                ''', (user_id, month_ago))
+                search_count = cursor.fetchone()[0]
+                
+                cursor.execute('''
+                SELECT COUNT(*) FROM requests 
+                WHERE user_id = ? AND req_type = 'weather' AND timestamp > ?
+                ''', (user_id, month_ago))
+                weather_count = cursor.fetchone()[0]
+                
+                cursor.execute('''
+                SELECT COUNT(*) FROM requests 
+                WHERE user_id = ? AND req_type = 'total' AND timestamp > ?
+                ''', (user_id, month_ago))
+                total_count = cursor.fetchone()[0]
+            else:
+                search_limit = GUEST_SEARCH_RATE_LIMIT
+                weather_limit = GUEST_WEATHER_RATE_LIMIT
+                total_limit = GUEST_TOTAL_QUERY_LIMIT
+                
+                cursor.execute('''
+                SELECT COUNT(*) FROM requests 
+                WHERE ip = ? AND req_type = 'search' AND timestamp > ? AND user_id IS NULL
+                ''', (ip, month_ago))
+                search_count = cursor.fetchone()[0]
+                
+                cursor.execute('''
+                SELECT COUNT(*) FROM requests 
+                WHERE ip = ? AND req_type = 'weather' AND timestamp > ? AND user_id IS NULL
+                ''', (ip, month_ago))
+                weather_count = cursor.fetchone()[0]
+                
+                cursor.execute('''
+                SELECT COUNT(*) FROM requests 
+                WHERE ip = ? AND req_type = 'total' AND timestamp > ? AND user_id IS NULL
+                ''', (ip, month_ago))
+                total_count = cursor.fetchone()[0]
         
         next_reset = self._get_next_reset(ip)
         reset_timestamp = int(next_reset.timestamp())
@@ -401,6 +515,10 @@ class SemanticParser:
             "greetings": "greeting_query",
             "g'day": "greeting_query",
             "howdy": "greeting_query",
+            "play": "command_query",
+            "pause": "command_query",
+            "stop": "command_query",
+            "skip": "command_query",
         }
         
         self.greeting_phrases = [
@@ -423,11 +541,14 @@ class SemanticParser:
             "date": self._get_date,
             "day": self._get_day,
             "search": self._web_search_tool,
+            "spotify": self._spotify_tool,
+            "music": self._spotify_tool,
         }
         
         self.entity_types = {
             "location": self._extract_location,
             "date": self._extract_date,
+            "spotify_action": self._extract_spotify_action,
         }
     
     def _reset_thoughts(self):
@@ -604,7 +725,7 @@ class SemanticParser:
         if location == "unknown location":
             return "I need a location to check the weather. Please specify a city or place."
         
-        ip = request.remote_addr
+        ip = get_client_ip()
         user_id = current_user.get_id() if current_user.is_authenticated else None
         allowed, remaining = rate_limiter.check_rate_limit(ip, "weather", user_id)
         if not allowed:
@@ -709,6 +830,15 @@ class SemanticParser:
         
         tools = self._identify_tools(tokens)
         
+        spotted_music_terms = any(term in query.lower() for term in ["spotify", "music", "song", "track", "play", "pause", "skip"])
+        spotify_action = None
+        
+        if spotted_music_terms:
+            spotify_action = self._extract_spotify_action(query)
+            if spotify_action:
+                self._add_thought("Found explicit Spotify action", spotify_action)
+                tools.add("spotify")
+        
         if not tools:
             self._add_thought("No explicit tools found, inferring from context", None)
             if query_type == "time_query" or "time" in query.lower():
@@ -723,14 +853,28 @@ class SemanticParser:
             elif "day" in query.lower():
                 tools.add("day")
                 self._add_thought("Inferred tool from context", "day")
+            elif spotted_music_terms:
+                tools.add("spotify")
+                self._add_thought("Inferred tool from context", "spotify")
         
         entities = self._extract_entities(query, tools)
         extracted_location = entities.get("location")
         
         entities["user_timezone"] = user_timezone
         
-        if not tools or query_type == "command_query":
-            self._add_thought("No explicit tools found, trying search", None)
+        if "spotify" in tools or "music" in tools:
+            if spotify_action:
+                entities["spotify_action"] = spotify_action
+                self._add_thought("Added spotify action to entities", spotify_action)
+        
+        use_search = False
+        if (not tools or (len(tools) == 0 and query_type == "command_query")) and not spotify_action:
+            use_search = True
+        elif len(tools) == 1 and ("spotify" in tools or "music" in tools) and not spotify_action:
+            use_search = True
+        
+        if use_search:
+            self._add_thought("No specific actions found, using search as fallback", None)
             search_terms = query.lower()
             for indicator in ["search", "find", "show", "get", "look up", "tell me about", "what is", "who is", "where is"]:
                 search_terms = search_terms.replace(indicator, "").strip()
@@ -799,7 +943,7 @@ class SemanticParser:
         if not query:
             return "What would you like me to search for?"
         
-        ip = request.remote_addr
+        ip = get_client_ip()
         user_id = current_user.get_id() if current_user.is_authenticated else None
         allowed, remaining = rate_limiter.check_rate_limit(ip, "search", user_id)
         if not allowed:
@@ -868,13 +1012,145 @@ class SemanticParser:
                 "error": "Search failed"
             })
 
+    def _extract_spotify_action(self, query: str) -> Optional[str]:
+        """Extract Spotify action from query"""
+        self._add_thought("Looking for Spotify action in query", None)
+        
+        query_lower = query.lower()
+        
+        if re.search(r"\b(play|resume)\b", query_lower) and not re.search(r"\b(playing|what's playing)\b", query_lower):
+            self._add_thought("Found Spotify action", "play")
+            return "play"
+        
+        if re.search(r"\b(pause|stop)\b", query_lower):
+            self._add_thought("Found Spotify action", "pause")
+            return "pause"
+        
+        if re.search(r"\b(next|skip|forward)\b", query_lower):
+            self._add_thought("Found Spotify action", "next")
+            return "next"
+        
+        if re.search(r"\b(previous|back|earlier|last|before)\b", query_lower):
+            self._add_thought("Found Spotify action", "previous")
+            return "previous"
+        
+        if re.search(r"\b(what'?s playing|current|now playing|what song|track|playing now)\b", query_lower):
+            self._add_thought("Found Spotify action", "now_playing")
+            return "now_playing"
+        
+        self._add_thought("No explicit Spotify action found", None)
+        return None
+        
+    def _spotify_tool(self, entities: Dict[str, Any]) -> str:
+        """Handle Spotify music controls and queries"""
+        self._add_thought("Executing Spotify tool", None)
+        
+        if not current_user.is_authenticated:
+            self._add_thought("User not authenticated", None)
+            return "You need to login to use Spotify integration. Go to Settings and sign in."
+        
+        spotify_action = entities.get("spotify_action")
+        if not spotify_action:
+            spotify_action = self._extract_spotify_action(entities.get("search_query", ""))
+        
+        self._add_thought("Spotify action", spotify_action)
+        
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM spotify_tokens WHERE user_id = ?", (current_user.id,))
+            token_data = cursor.fetchone()
+        
+        if not token_data:
+            self._add_thought("Spotify not connected", None)
+            return "You haven't connected your Spotify account yet. Go to Settings > Integrations to connect Spotify."
+        
+        spotify = get_spotify_client(current_user.id)
+        if not spotify:
+            self._add_thought("Failed to get Spotify client", None)
+            return "There was an error connecting to Spotify. Please try reconnecting your account."
+        
+        try:
+            if spotify_action == "now_playing":
+                self._add_thought("Getting currently playing track", None)
+                current_playback = spotify.current_playback()
+                
+                if not current_playback or not current_playback.get('item'):
+                    self._add_thought("No active playback", None)
+                    return "There's nothing playing on Spotify right now."
+                
+                track = current_playback['item']
+                artists = ", ".join(artist['name'] for artist in track['artists'])
+                is_playing = current_playback['is_playing']
+                device_name = current_playback.get('device', {}).get('name', 'your device')
+                
+                status = "playing" if is_playing else "paused"
+                self._add_thought("Current track info", {"track": track['name'], "artist": artists, "status": status})
+                
+                return f"Currently {status} on {device_name}: \"{track['name']}\" by {artists}."
+                
+            elif spotify_action == "play":
+                self._add_thought("Starting playback", None)
+                spotify.start_playback()
+                return "Playing music on Spotify."
+                
+            elif spotify_action == "pause":
+                self._add_thought("Pausing playback", None)
+                spotify.pause_playback()
+                return "Paused Spotify playback."
+                
+            elif spotify_action == "next":
+                self._add_thought("Skipping to next track", None)
+                spotify.next_track()
+                
+                time.sleep(1)
+                current = spotify.current_playback()
+                if current and current.get('item'):
+                    track = current['item']
+                    artists = ", ".join(artist['name'] for artist in track['artists'])
+                    return f"Skipped to next track: \"{track['name']}\" by {artists}."
+                else:
+                    return "Skipped to the next track."
+                
+            elif spotify_action == "previous":
+                self._add_thought("Going to previous track", None)
+                spotify.previous_track()
+                
+                time.sleep(1) 
+                current = spotify.current_playback()
+                if current and current.get('item'):
+                    track = current['item']
+                    artists = ", ".join(artist['name'] for artist in track['artists'])
+                    return f"Went to previous track: \"{track['name']}\" by {artists}."
+                else:
+                    return "Went to the previous track."
+            
+            else:
+                self._add_thought("Unknown Spotify action", spotify_action)
+                return "I'm not sure what you want to do with Spotify. You can ask me to play, pause, skip to next/previous track, or check what's playing."
+                
+        except Exception as e:
+            error_msg = str(e)
+            self._add_thought("Error with Spotify API", error_msg)
+            
+            if "No active device found" in error_msg:
+                return "I couldn't find an active Spotify device. Please make sure Spotify is open on one of your devices."
+            elif "Premium required" in error_msg:
+                return "This action requires a Spotify Premium subscription."
+            else:
+                return f"There was an error controlling Spotify: {error_msg}"
+
 app = Flask(__name__, static_folder='static')
 app.secret_key = SECRET_KEY
 app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = False  # ENSURE THIS IS TRUE FOR PRODUCTION
 
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
+
+# Remove CSRF initialization and exemptions
 
 oauth = OAuth(app)
 
@@ -908,6 +1184,14 @@ rate_limiter = RateLimiter()
 
 init_db()
 
+def get_client_ip():
+    """Get client IP address, respecting proxy headers if present"""
+    if request.headers.get('CF-Connecting-IP'):
+        ip = request.headers.get('CF-Connecting-IP').split(',')[0].strip()
+    else:
+        ip = request.remote_addr
+    return ip
+
 @app.route('/api/query', methods=['POST'])
 def process_query():
     data = request.json
@@ -917,7 +1201,7 @@ def process_query():
     if not query:
         return jsonify({"error": "No query provided"}), 400
     
-    ip = request.remote_addr
+    ip = get_client_ip()
     user_id = current_user.get_id() if current_user.is_authenticated else None
     allowed, remaining = rate_limiter.check_rate_limit(ip, "total", user_id)
     if not allowed:
@@ -945,7 +1229,7 @@ def process_query():
 @app.route('/api/limits', methods=['GET'])
 def get_rate_limits():
     """Get current rate limit status for requesting IP"""
-    ip = request.remote_addr
+    ip = get_client_ip()
     user_id = current_user.get_id() if current_user.is_authenticated else None
     limits = rate_limiter.get_limits(ip, user_id)
     return jsonify(limits)
@@ -977,40 +1261,40 @@ def login():
 @app.route('/login/google')
 def login_google():
     """Login with Google OAuth"""
+    state = secrets.token_urlsafe(16)
+    session['oauth_state'] = state
+    
     redirect_uri = url_for('auth_google', _external=True)
-    return oauth.google.authorize_redirect(redirect_uri)
-
-@app.route('/login/github')
-def login_github():
-    """Login with GitHub OAuth"""
-    redirect_uri = url_for('auth_github', _external=True)
-    return oauth.github.authorize_redirect(redirect_uri)
+    return oauth.google.authorize_redirect(redirect_uri, state=state)
 
 @app.route('/auth/google')
 def auth_google():
     """Handle Google OAuth callback"""
+    expected_state = session.pop('oauth_state', None)
+    callback_state = request.args.get('state')
+    
+    if not expected_state or callback_state != expected_state:
+        return "Invalid authentication state. Please try again.", 403
+        
     token = oauth.google.authorize_access_token()
     
-    # Fix: Use the full URL for the userinfo endpoint
     resp = oauth.google.get('https://www.googleapis.com/oauth2/v3/userinfo')
     user_info = resp.json()
     
     user_id = f"google_{user_info['sub']}"
     
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-    existing_user = cursor.fetchone()
-    
-    if not existing_user:
-        cursor.execute(
-            "INSERT INTO users (id, name, email, provider, profile_pic) VALUES (?, ?, ?, ?, ?)",
-            (user_id, user_info.get('name'), user_info.get('email'), 'google', user_info.get('picture'))
-        )
-        conn.commit()
-    
-    conn.close()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        existing_user = cursor.fetchone()
+        
+        if not existing_user:
+            cursor.execute(
+                "INSERT INTO users (id, name, email, provider, profile_pic) VALUES (?, ?, ?, ?, ?)",
+                (user_id, user_info.get('name'), user_info.get('email'), 'google', user_info.get('picture'))
+            )
+            conn.commit()
     
     user = User(
         id=user_id,
@@ -1023,9 +1307,24 @@ def auth_google():
     
     return redirect('/')
 
+@app.route('/login/github')
+def login_github():
+    """Login with GitHub OAuth"""
+    state = secrets.token_urlsafe(16)
+    session['oauth_state'] = state
+    
+    redirect_uri = url_for('auth_github', _external=True)
+    return oauth.github.authorize_redirect(redirect_uri, state=state)
+
 @app.route('/auth/github')
 def auth_github():
     """Handle GitHub OAuth callback"""
+    expected_state = session.pop('oauth_state', None)
+    callback_state = request.args.get('state')
+    
+    if not expected_state or callback_state != expected_state:
+        return "Invalid authentication state. Please try again.", 403
+        
     token = oauth.github.authorize_access_token()
     resp = oauth.github.get('https://api.github.com/user', token=token)
     user_info = resp.json()
@@ -1037,20 +1336,18 @@ def auth_github():
     
     user_id = f"github_{user_info['id']}"
     
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-    existing_user = cursor.fetchone()
-    
-    if not existing_user:
-        cursor.execute(
-            "INSERT INTO users (id, name, email, provider, profile_pic) VALUES (?, ?, ?, ?, ?)",
-            (user_id, user_info.get('name', user_info.get('login')), primary_email, 'github', user_info.get('avatar_url'))
-        )
-        conn.commit()
-    
-    conn.close()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        existing_user = cursor.fetchone()
+        
+        if not existing_user:
+            cursor.execute(
+                "INSERT INTO users (id, name, email, provider, profile_pic) VALUES (?, ?, ?, ?, ?)",
+                (user_id, user_info.get('name', user_info.get('login')), primary_email, 'github', user_info.get('avatar_url'))
+            )
+            conn.commit()
     
     user = User(
         id=user_id,
@@ -1062,6 +1359,195 @@ def auth_github():
     login_user(user)
     
     return redirect('/')
+
+@app.route('/login/spotify')
+def login_spotify():
+    """Initiate Spotify OAuth flow"""
+    if not current_user.is_authenticated:
+        return redirect('/login')
+    
+    if 'spotify_auth_attempts' not in session:
+        session['spotify_auth_attempts'] = 0
+    
+    if session['spotify_auth_attempts'] > 2:
+        session.pop('spotify_auth_attempts', None)
+        return "Too many redirect attempts. Please try again later."
+    
+    session['spotify_auth_attempts'] = session['spotify_auth_attempts'] + 1
+    
+    state = secrets.token_urlsafe(16)
+    session['spotify_oauth_state'] = state
+    
+    cache_handler = DatabaseCacheHandler(current_user.id)
+    
+    auth_manager = SpotifyOAuth(
+        client_id=SPOTIFY_CLIENT_ID,
+        client_secret=SPOTIFY_CLIENT_SECRET,
+        redirect_uri=SPOTIFY_REDIRECT_URI,
+        scope=' '.join(SPOTIFY_SCOPES),
+        cache_handler=cache_handler,
+        show_dialog=True,
+        state=state
+    )
+    
+    auth_url = auth_manager.get_authorize_url()
+    return redirect(auth_url)
+
+@app.route('/auth/spotify/callback')
+def auth_spotify_callback():
+    """Handle Spotify OAuth callback"""
+    if not current_user.is_authenticated:
+        return redirect('/login')
+
+    session.pop('spotify_auth_attempts', None)
+    
+    expected_state = session.pop('spotify_oauth_state', None)
+    callback_state = request.args.get('state')
+    
+    if not expected_state or callback_state != expected_state:
+        return "Invalid authentication state. Please try again.", 403
+    
+    code = request.args.get('code')
+    if not code:
+        error = request.args.get('error')
+        if error:
+            return f"Authorization failed: {error}"
+        return redirect('/')
+    
+    cache_handler = DatabaseCacheHandler(current_user.id)
+    
+    auth_manager = SpotifyOAuth(
+        client_id=SPOTIFY_CLIENT_ID,
+        client_secret=SPOTIFY_CLIENT_SECRET,
+        redirect_uri=SPOTIFY_REDIRECT_URI,
+        scope=' '.join(SPOTIFY_SCOPES),
+        cache_handler=cache_handler
+    )
+    
+    try:
+        token_info = auth_manager.get_access_token(code, check_cache=False)
+        return redirect('/integrations')
+    except Exception as e:
+        return f"Error authenticating with Spotify: {str(e)}"
+
+@app.route('/integrations')
+@login_required
+def integrations_page():
+    """Show integrations management page"""
+    return send_from_directory('static', 'integrations.html')
+
+@app.route('/api/integrations/spotify/status', methods=['GET'])
+def spotify_integration_status():
+    """Check if user has linked their Spotify account"""
+    if not current_user.is_authenticated:
+        return jsonify({"linked": False, "message": "You need to login first"})
+    
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM spotify_tokens WHERE user_id = ?", (current_user.id,))
+        token_data = cursor.fetchone()
+    
+    if token_data:
+        spotify = get_spotify_client(current_user.id)
+        try:
+            current_playback = spotify.current_playback()
+            if current_playback:
+                return jsonify({
+                    "linked": True,
+                    "active": True,
+                    "message": "Spotify connected and active"
+                })
+            else:
+                return jsonify({
+                    "linked": True,
+                    "active": False,
+                    "message": "Spotify connected, but no active playback detected"
+                })
+        except:
+            return jsonify({
+                "linked": True,
+                "active": False,
+                "message": "Spotify connected, but there was an error checking playback"
+            })
+    
+    return jsonify({
+        "linked": False,
+        "message": "Spotify not connected"
+    })
+
+@app.route('/api/integrations/spotify/disconnect', methods=['POST'])
+@login_required
+def spotify_disconnect():
+    """Disconnect Spotify integration"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        cursor.execute("DELETE FROM spotify_tokens WHERE user_id = ?", (current_user.id,))
+        conn.commit()
+    
+    return jsonify({"success": True, "message": "Spotify disconnected successfully"})
+
+@app.route('/api/integrations/spotify/now-playing', methods=['GET'])
+def spotify_now_playing():
+    """Get currently playing track info"""
+    if not current_user.is_authenticated:
+        return jsonify({"error": "You need to login first"}), 401
+    
+    spotify = get_spotify_client(current_user.id)
+    if not spotify:
+        return jsonify({"error": "Spotify not connected"}), 404
+    
+    try:
+        current_playback = spotify.current_playback()
+        if not current_playback:
+            return jsonify({"error": "No active playback detected"}), 404
+        
+        track = current_playback['item']
+        
+        return jsonify({
+            "track_name": track['name'],
+            "artist": ", ".join(artist['name'] for artist in track['artists']),
+            "album": track['album']['name'],
+            "album_art": track['album']['images'][0]['url'] if track['album']['images'] else None,
+            "is_playing": current_playback['is_playing'],
+            "duration_ms": track['duration_ms'],
+            "progress_ms": current_playback['progress_ms'],
+            "device": current_playback['device']['name'] if 'device' in current_playback else None
+        })
+    except Exception as e:
+        return jsonify({"error": f"Error getting playback: {str(e)}"}), 500
+
+@app.route('/api/integrations/spotify/control', methods=['POST'])
+@login_required
+def spotify_control():
+    """Control Spotify playback"""
+    action = request.json.get('action')
+    
+    if not action:
+        return jsonify({"error": "No action specified"}), 400
+    
+    spotify = get_spotify_client(current_user.id)
+    if not spotify:
+        return jsonify({"error": "Spotify not connected"}), 404
+    
+    try:
+        if action == "play":
+            spotify.start_playback()
+            return jsonify({"success": True, "message": "Playback started"})
+        elif action == "pause":
+            spotify.pause_playback()
+            return jsonify({"success": True, "message": "Playback paused"})
+        elif action == "next":
+            spotify.next_track()
+            return jsonify({"success": True, "message": "Skipped to next track"})
+        elif action == "previous":
+            spotify.previous_track()
+            return jsonify({"success": True, "message": "Skipped to previous track"})
+        else:
+            return jsonify({"error": f"Unknown action: {action}"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Error controlling playback: {str(e)}"}), 500
 
 @app.route('/logout')
 def logout():
@@ -1077,4 +1563,5 @@ def serve_static(path):
     return send_from_directory('static', path)
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5300)
+    is_production = os.getenv("PRODUCTION", "false").lower() == "true"
+    app.run(debug=(not is_production), port=5300, host='0.0.0.0')
