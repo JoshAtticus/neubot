@@ -868,10 +868,14 @@ class SemanticParser:
                 self._add_thought("Added spotify action to entities", spotify_action)
         
         use_search = False
-        if (not tools or (len(tools) == 0 and query_type == "command_query")) and not spotify_action:
+        if len(tools) == 0 and not spotify_action:
             use_search = True
         elif len(tools) == 1 and ("spotify" in tools or "music" in tools) and not spotify_action:
             use_search = True
+            
+        if "search" in tools and len(tools) > 1:
+            tools.remove("search")
+            self._add_thought("Removed search tool as other tools are available", list(tools))
         
         if use_search:
             self._add_thought("No specific actions found, using search as fallback", None)
@@ -879,9 +883,10 @@ class SemanticParser:
             for indicator in ["search", "find", "show", "get", "look up", "tell me about", "what is", "who is", "where is"]:
                 search_terms = search_terms.replace(indicator, "").strip()
             if search_terms:
-                tools.add("search")
-                entities["search_query"] = search_terms
-                self._add_thought("Inferred search tool", {"terms": search_terms})
+                if len(tools) == 0 or (len(tools) == 1 and ("spotify" in tools or "music" in tools) and not spotify_action):
+                    tools.add("search")
+                    entities["search_query"] = search_terms
+                    self._add_thought("Inferred search tool", {"terms": search_terms})
         
         if tools:
             self._add_thought("Preparing to execute tools", list(tools))
@@ -1149,8 +1154,6 @@ app.config['SESSION_COOKIE_SECURE'] = False  # ENSURE THIS IS TRUE FOR PRODUCTIO
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
-
-# Remove CSRF initialization and exemptions
 
 oauth = OAuth(app)
 
