@@ -230,12 +230,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const detailsId = 'details-' + Date.now();
         const toggleId = 'toggle-' + Date.now();
         
-        // Check if this contains JSON data within a text message
         let spotifyData = null;
         let searchResults = null;
         let plainText = text;
         
-        // First check if it's pure JSON
         try {
             const data = JSON.parse(text);
             if (data.type === 'search_results') {
@@ -246,7 +244,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 plainText = null;
             }
         } catch (e) {
-            // Not pure JSON, check if there's embedded JSON in the text
             const jsonRegex = /\{"type":\s*"(spotify_track|search_results)".*?\}/gs;
             const match = text.match(jsonRegex);
             
@@ -256,24 +253,19 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     if (jsonData.type === 'spotify_track') {
                         spotifyData = jsonData;
-                        // Extract the text part, removing the JSON
                         plainText = text.replace(jsonRegex, '').trim();
                     } else if (jsonData.type === 'search_results') {
                         searchResults = jsonData;
-                        // Extract the text part, removing the JSON
                         plainText = text.replace(jsonRegex, '').trim();
                     }
                 } catch (err) {
-                    // If JSON parsing fails, keep original text
                     plainText = text;
                 }
             } else {
-                // No JSON found, keep original text
                 plainText = text;
             }
         }
 
-        // Create the bot icon and message info section (always the same)
         const messageHTML = `
             <div class="bot-icon"><img src="neubot-icon.svg" alt="Bot"></div>
             <div class="message-content">
@@ -288,7 +280,6 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const messageContent = messageDiv.querySelector('.message-content');
         
-        // Add plain text if available
         if (plainText) {
             const textMessage = document.createElement('div');
             textMessage.className = 'message-text';
@@ -296,7 +287,6 @@ document.addEventListener('DOMContentLoaded', function() {
             messageContent.appendChild(textMessage);
         }
         
-        // Add special content if available
         if (searchResults) {
             const searchResultsDiv = document.createElement('div');
             searchResultsDiv.innerHTML = formatSearchResults(searchResults);
@@ -304,7 +294,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         if (spotifyData) {
-            // Add Spotify player component
             const trackData = {
                 trackName: spotifyData.track_name,
                 artist: spotifyData.artist,
@@ -316,14 +305,12 @@ document.addEventListener('DOMContentLoaded', function() {
             messageContent.appendChild(playerElement);
         }
         
-        // Create and add the details section
         const detailsElement = document.createElement('div');
         detailsElement.id = detailsId;
         detailsElement.className = 'thinking-process';
         detailsElement.style.display = 'none';
         messageContent.appendChild(detailsElement);
         
-        // Add to chat and set up event listeners
         chatContainer.appendChild(messageDiv);
         
         displayThoughtProcess(thoughts, detailsElement);
