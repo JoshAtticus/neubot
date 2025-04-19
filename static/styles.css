@@ -1990,3 +1990,76 @@ select {
         text-align: center;
     }
 }
+
+.legal-notice {
+    text-align: center;
+    font-size: 12px;
+    color: #888;
+    margin: 8px 0;
+}
+
+.legal-notice a {
+    color: #3B82F6;
+    text-decoration: none;
+}
+
+.legal-notice a:hover {
+    text-decoration: underline;
+}
+
+.legal-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.legal-content {
+    background-color: #1a1a1a;
+    border-radius: 8px;
+    padding: 30px;
+    margin: 20px 0;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.legal-content h1 {
+    font-size: 28px;
+    margin-bottom: 5px;
+    color: #fff;
+}
+
+.legal-section {
+    margin: 30px 0;
+}
+
+.legal-section h2 {
+    font-size: 20px;
+    margin-bottom: 10px;
+    color: #fff;
+}
+
+.legal-section p, .legal-section li {
+    line-height: 1.6;
+    color: #fff;
+    margin-bottom: 10px;
+}
+
+.legal-section ul {
+    padding-left: 20px;
+    margin: 10px 0;
+}
+
+.legal-section ul li {
+    margin-bottom: 5px;
+}
+
+.back-link {
+    display: inline-block;
+    color: #3B82F6;
+    text-decoration: none;
+    font-size: 14px;
+    margin-top: 5px;
+}
+
+.back-link:hover {
+    text-decoration: underline;
+}
