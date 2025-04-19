@@ -6,8 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>neubot</title>
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+        crossorigin="anonymous">
     <link rel="icon" href="neubot-icon.svg" type="image/svg+xml">
+    <script defer data-domain="neubot.joshatticus.site" data-api="/redfrog/server-events/event"
+        src="/redfrog/red-frog-596f/script.file-downloads.outbound-links.js"></script>
 </head>
 
 <body>
@@ -38,7 +41,7 @@
                 <input type="text" id="query-input" placeholder="type something to neubot...">
                 <button id="send-button"><i class="fas fa-paper-plane"></i></button>
             </div>
-            
+
             <div id="thinking-process"></div>
         </div>
 
@@ -57,12 +60,14 @@
                                 </div>
                                 <div class="sidebar-account-info">
                                     <div class="sidebar-account-name" id="sidebar-account-name">Account</div>
-                                    <div class="sidebar-account-email" id="sidebar-account-email">Sign in for increased limits</div>
+                                    <div class="sidebar-account-email" id="sidebar-account-email">Sign in for increased
+                                        limits</div>
                                 </div>
                             </div>
                         </div>
                         <div class="sidebar-item active" data-panel="general">General</div>
-                        <div class="sidebar-item" data-panel="integrations">Integrations <span class="beta-tag">BETA</span></div>
+                        <div class="sidebar-item" data-panel="integrations">Integrations <span
+                                class="beta-tag">BETA</span></div>
                         <div class="sidebar-item" data-panel="about">About</div>
                     </div>
                 </div>
@@ -80,7 +85,7 @@
                                     <span class="toggle-slider"></span>
                                 </label>
                             </div>
-                            
+
                             <div class="setting-item">
                                 <div class="setting-info">
                                     <h4>Show Send Button</h4>
@@ -93,7 +98,7 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="panel" id="account-panel">
                         <div id="account-logged-out" style="display: none;" class="account-big-display">
                             <div class="account-header">
@@ -102,12 +107,13 @@
                                 </div>
                                 <div class="user-details">
                                     <h3>Account</h3>
-                                    <p class="account-status">Sign in for increased rate limits and enhanced features</p>
+                                    <p class="account-status">Sign in for increased rate limits and enhanced features
+                                    </p>
                                     <a href="/login" class="login-button">Sign in</a>
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div id="account-logged-in" style="display: none;" class="account-big-display">
                             <div class="account-header">
                                 <div class="user-avatar large">
@@ -121,10 +127,11 @@
                                 </div>
                             </div>
                         </div>
-                        
+
                         <h3>Rate Limits</h3>
                         <div class="reset-info">
-                            <p>Your limits will reset in <span id="days-remaining">-</span> day(s). Limits do not roll over, any remaining queries at the end of the month will be discarded.</p>
+                            <p>Your limits will reset in <span id="days-remaining">-</span> day(s). Limits do not roll
+                                over, any remaining queries at the end of the month will be discarded.</p>
                         </div>
                         <div class="rate-limit-card">
                             <h4>Total Queries</h4>
@@ -165,7 +172,7 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="panel" id="about-panel">
                         <h1>neubot</h1>
                         <div class="about-content">
@@ -182,21 +189,22 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="panel" id="integrations-panel">
                         <h3>Integrations <span class="beta-tag">BETA</span></h3>
                         <p>Connect your accounts to enable additional features and services.</p>
-                        
+
                         <div class="settings-group">
                             <div class="setting-item">
                                 <div class="setting-info">
                                     <h4>Spotify <span class="beta-tag">BETA</span></h4>
-                                    <p>Control music playback and see what's currently playing. Some features may require a premium subscription.</p>
+                                    <p>Control music playback and see what's currently playing. Some features may
+                                        require a premium subscription.</p>
                                 </div>
                                 <a href="/integrations" class="login-button">Manage</a>
                             </div>
                         </div>
-                        
+
                         <p style="margin-top: 20px; color: #888; font-size: 14px;">
                             Connected integrations allow neubot to interact with other services on your behalf.
                             You can manage your connections or disconnect at any time.

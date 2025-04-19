@@ -1672,3 +1672,321 @@ select {
         -webkit-text-size-adjust: 100%;
     }
 }
+
+.integrations-container {
+    max-width: 800px;
+    margin: 50px auto;
+    padding: 20px;
+}
+
+.beta-tag {
+    background-color: #3498db;
+    color: white;
+    font-size: 14px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    vertical-align: middle;
+    font-weight: 500;
+    display: inline-block;
+    text-transform: uppercase;
+    font-family: 'Segoe UI', sans-serif;
+    letter-spacing: 0.5px;
+}
+
+.integration-card {
+    background-color: #232323;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+}
+
+.integration-logo {
+    width: 70px;
+    height: 70px;
+    margin-right: 25px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background-color: #333;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.integration-logo img {
+    max-width: 80%;
+    max-height: 80%;
+}
+
+.integration-details {
+    flex: 1;
+}
+
+.integration-name {
+    font-size: 24px;
+    margin: 0 0 5px 0;
+    font-weight: 700;
+}
+
+.integration-description {
+    color: #aaa;
+    margin: 0 0 15px 0;
+    font-size: 15px;
+    line-height: 1.4;
+}
+
+.integration-status {
+    font-size: 14px;
+    margin-bottom: 15px;
+}
+
+.status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 5px;
+    vertical-align: middle;
+}
+
+.status-connected {
+    background-color: #4ade80;
+}
+
+.status-disconnected {
+    background-color: #ef4444;
+}
+
+.integration-buttons {
+    display: flex;
+    gap: 12px;
+}
+
+.btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 500;
+    border: none;
+    transition: all 0.2s ease;
+}
+
+.btn-connect {
+    background-color: #3498db;
+    color: white;
+}
+
+.btn-connect:hover {
+    background-color: #2980b9;
+}
+
+.btn-disconnect {
+    background-color: #2a2a2a;
+    color: #ef4444;
+    border: 1px solid #ef4444;
+}
+
+.btn-disconnect:hover {
+    background-color: rgba(239, 68, 68, 0.1);
+}
+
+.btn-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-back {
+    display: inline-flex;
+    align-items: center;
+    color: #888;
+    text-decoration: none;
+    margin-bottom: 20px;
+    transition: color 0.2s;
+}
+
+.btn-back:hover {
+    color: #fff;
+}
+
+.btn-back i {
+    margin-right: 8px;
+}
+
+.now-playing {
+    margin-top: 15px;
+    background-color: #2a2a2a;
+    border-radius: 8px;
+    padding: 15px;
+    display: flex;
+    align-items: center;
+    max-width: 500px;
+}
+
+.album-art {
+    width: 60px;
+    height: 60px;
+    margin-right: 15px;
+    border-radius: 6px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.album-art img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.track-info {
+    flex: 1;
+    min-width: 0;}
+
+.track-name {
+    font-weight: 600;
+    font-size: 16px;
+    margin: 0 0 5px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.track-artist {
+    color: #bbb;
+    font-size: 14px;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.playback-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+}
+
+.control-btn {
+    background: none;
+    border: none;
+    color: #bbb;
+    cursor: pointer;
+    padding: 5px;
+    transition: all 0.2s;
+}
+
+.control-btn:hover {
+    color: #fff;
+    transform: scale(1.1);
+}
+
+.control-btn.play-pause {
+    color: #3498db;
+    font-size: 18px;
+}
+
+.device-info {
+    font-size: 12px;
+    color: #777;
+    margin-top: 5px;
+}
+
+#loading {
+    color: #888;
+    margin: 20px 0;
+}
+
+#error-message {
+    color: #ef4444;
+    margin: 20px 0;
+    padding: 10px;
+    background-color: rgba(239, 68, 68, 0.1);
+    border-radius: 6px;
+    display: none;
+}
+
+.integration-features {
+    margin-top: 10px;
+    font-size: 14px;
+    color: #888;
+}
+
+.feature-list {
+    padding-left: 20px;
+    margin: 5px 0;
+    color: #bbb;
+}
+
+@media (max-width: 768px) {
+    .integrations-container {
+        margin: 20px auto;
+        padding: 15px;
+    }
+
+    .integration-card {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 20px;
+    }
+
+    .integration-logo {
+        margin-right: 0;
+        margin-bottom: 15px;
+        width: 60px;
+        height: 60px;
+    }
+
+    .integration-name {
+        font-size: 20px;
+    }
+
+    .integration-description {
+        font-size: 14px;
+    }
+
+    .now-playing {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .album-art {
+        margin-right: 0;
+        margin-bottom: 10px;
+        width: 100px;
+        height: 100px;
+    }
+
+    .playback-controls {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    h1 {
+        font-size: 36px;
+    }
+}
+
+@media (max-width: 480px) {
+    .integrations-container {
+        margin: 10px auto;
+        padding: 10px;
+    }
+
+    h1 {
+        font-size: 28px;
+    }
+
+    .integration-buttons {
+        flex-direction: column;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .btn {
+        width: 100%;
+        text-align: center;
+    }
+}
