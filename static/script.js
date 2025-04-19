@@ -230,19 +230,47 @@ document.addEventListener('DOMContentLoaded', function() {
         const detailsId = 'details-' + Date.now();
         const toggleId = 'toggle-' + Date.now();
         
-        // Check if this is a special message type
-        let searchResults = null;
+        // Check if this contains JSON data within a text message
         let spotifyData = null;
+        let searchResults = null;
+        let plainText = text;
         
+        // First check if it's pure JSON
         try {
             const data = JSON.parse(text);
             if (data.type === 'search_results') {
                 searchResults = data;
+                plainText = null;
             } else if (data.type === 'spotify_track') {
                 spotifyData = data;
+                plainText = null;
             }
         } catch (e) {
-            // Not JSON, just a regular text message
+            // Not pure JSON, check if there's embedded JSON in the text
+            const jsonRegex = /\{"type":\s*"(spotify_track|search_results)".*?\}/gs;
+            const match = text.match(jsonRegex);
+            
+            if (match) {
+                try {
+                    const jsonData = JSON.parse(match[0]);
+                    
+                    if (jsonData.type === 'spotify_track') {
+                        spotifyData = jsonData;
+                        // Extract the text part, removing the JSON
+                        plainText = text.replace(jsonRegex, '').trim();
+                    } else if (jsonData.type === 'search_results') {
+                        searchResults = jsonData;
+                        // Extract the text part, removing the JSON
+                        plainText = text.replace(jsonRegex, '').trim();
+                    }
+                } catch (err) {
+                    // If JSON parsing fails, keep original text
+                    plainText = text;
+                }
+            } else {
+                // No JSON found, keep original text
+                plainText = text;
+            }
         }
 
         // Create the bot icon and message info section (always the same)
@@ -260,22 +288,23 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const messageContent = messageDiv.querySelector('.message-content');
         
-        // Now add the actual message content based on type
+        // Add plain text if available
+        if (plainText) {
+            const textMessage = document.createElement('div');
+            textMessage.className = 'message-text';
+            textMessage.innerHTML = plainText;
+            messageContent.appendChild(textMessage);
+        }
+        
+        // Add special content if available
         if (searchResults) {
-            // Search results case
             const searchResultsDiv = document.createElement('div');
             searchResultsDiv.innerHTML = formatSearchResults(searchResults);
             messageContent.appendChild(searchResultsDiv);
-        } else if (spotifyData) {
-            // Spotify track case - create a text message first
-            const textMessage = document.createElement('div');
-            textMessage.className = 'message-text';
-            
-            let statusText = spotifyData.is_playing ? "Currently playing" : "Currently paused";
-            textMessage.textContent = `${statusText}: "${spotifyData.track_name}" by ${spotifyData.artist}`;
-            messageContent.appendChild(textMessage);
-            
-            // Now create and append the spotify player component
+        }
+        
+        if (spotifyData) {
+            // Add Spotify player component
             const trackData = {
                 trackName: spotifyData.track_name,
                 artist: spotifyData.artist,
@@ -285,12 +314,6 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const playerElement = createSpotifyPlayerForChat(trackData);
             messageContent.appendChild(playerElement);
-        } else {
-            // Regular text message
-            const textMessage = document.createElement('div');
-            textMessage.className = 'message-text';
-            textMessage.innerHTML = text;
-            messageContent.appendChild(textMessage);
         }
         
         // Create and add the details section
