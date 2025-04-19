@@ -16,6 +16,20 @@
             padding: 20px;
         }
         
+        .beta-tag {
+            background-color: #3498db;
+            color: white;
+            font-size: 14px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            vertical-align: middle;
+            font-weight: 500;
+            display: inline-block;
+            text-transform: uppercase;
+            font-family: 'Segoe UI', sans-serif;
+            letter-spacing: 0.5px;
+        }
+        
         .integration-card {
             background-color: #232323;
             border-radius: 12px;
@@ -243,13 +257,85 @@
             margin: 5px 0;
             color: #bbb;
         }
+        
+        /* Mobile responsiveness improvements */
+        @media (max-width: 768px) {
+            .integrations-container {
+                margin: 20px auto;
+                padding: 15px;
+            }
+            
+            .integration-card {
+                flex-direction: column;
+                align-items: flex-start;
+                padding: 20px;
+            }
+            
+            .integration-logo {
+                margin-right: 0;
+                margin-bottom: 15px;
+                width: 60px;
+                height: 60px;
+            }
+            
+            .integration-name {
+                font-size: 20px;
+            }
+            
+            .integration-description {
+                font-size: 14px;
+            }
+            
+            .now-playing {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .album-art {
+                margin-right: 0;
+                margin-bottom: 10px;
+                width: 100px;
+                height: 100px;
+            }
+            
+            .playback-controls {
+                width: 100%;
+                justify-content: space-between;
+            }
+            
+            h1 {
+                font-size: 36px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .integrations-container {
+                margin: 10px auto;
+                padding: 10px;
+            }
+            
+            h1 {
+                font-size: 28px;
+            }
+            
+            .integration-buttons {
+                flex-direction: column;
+                gap: 8px;
+                width: 100%;
+            }
+            
+            .btn {
+                width: 100%;
+                text-align: center;
+            }
+        }
     </style>
 </head>
 
 <body>
     <div class="integrations-container">
         <a href="/" class="btn-back"><i class="fas fa-arrow-left"></i> Back to neubot</a>
-        <h1>Integrations</h1>
+        <h1>Integrations <span class="beta-tag">BETA</span></h1>
         <p class="subtitle">Connect your services to enhance neubot's capabilities</p>
         
         <div id="loading">Loading integrations...</div>
@@ -260,8 +346,8 @@
                 <img src="https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_Green.png" alt="Spotify Logo">
             </div>
             <div class="integration-details">
-                <h3 class="integration-name">Spotify</h3>
-                <p class="integration-description">Control your Spotify music playback and see what's currently playing. Some features may require a premium subscription.</p>
+                <h3 class="integration-name">Spotify <span class="beta-tag">BETA</span></h3>
+                <p class="integration-description">Control your Spotify music playback and see what's currently playing. Some features may require a premium subscription. Spotify integration is currently in beta and you may experience issues.</p>
                 
                 <div class="integration-status">
                     <span class="status-indicator status-disconnected" id="spotify-status-indicator"></span>

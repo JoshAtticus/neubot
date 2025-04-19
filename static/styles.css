@@ -1068,6 +1068,31 @@ input:focus + .toggle-slider {
     .thinking-animation {
         margin-left: 42px;
     }
+    
+    .sidebar-item .beta-tag {
+        font-size: 10px;
+        padding: 1px 4px;
+    }
+    
+    .modal-content {
+        width: 95%;
+        height: 95%;
+    }
+
+    .setting-item {
+        padding: 12px;
+    }
+    
+    .integration-buttons {
+        flex-direction: column;
+        gap: 8px;
+        width: 100%;
+    }
+    
+    .btn {
+        width: 100%;
+        text-align: center;
+    }
 }
 
 /* Even smaller screens adjustments */
@@ -1100,6 +1125,47 @@ input:focus + .toggle-slider {
     
     .sidebar-header h2 {
         font-size: 20px;
+    }
+    
+    .integrations-container {
+        margin: 10px auto;
+        padding: 10px;
+    }
+    
+    .integration-card {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 15px;
+    }
+    
+    .integration-logo {
+        margin-right: 0;
+        margin-bottom: 10px;
+    }
+    
+    .now-playing {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .album-art {
+        margin-right: 0;
+        margin-bottom: 10px;
+        width: 80px;
+        height: 80px;
+    }
+    
+    .playback-controls {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .reset-info {
+        font-size: 13px;
+    }
+    
+    .modal-sidebar {
+        min-height: 60px;
     }
 }
 
@@ -1359,4 +1425,19 @@ input:focus + .toggle-slider {
     .user-details {
         text-align: center;
     }
+}
+
+.beta-tag {
+    background-color: #3498db;
+    color: white;
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-bottom: 3px;
+    vertical-align: middle;
+    font-weight: 500;
+    display: inline-block;
+    text-transform: uppercase;
+    font-family: 'Segoe UI', sans-serif;
+    letter-spacing: 0.5px;
 }
