@@ -2063,3 +2063,7 @@ select {
 .back-link:hover {
     text-decoration: underline;
 }
+
+.legal-link {
+    color: #3B82F6;
+}
