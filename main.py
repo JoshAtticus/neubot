@@ -22,6 +22,11 @@ from spotipy.oauth2 import SpotifyOAuth, CacheHandler
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from authlib.integrations.flask_client import OAuth
 import contextlib
+import base64
+from cryptography.fernet import Fernet
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 load_dotenv()
 
@@ -53,6 +58,37 @@ SPOTIFY_SCOPES = [
 ]
 
 DB_FILE = "neubot.db"
+
+def get_encryption_key(secret_key: str) -> bytes:
+    """
+    Derive an encryption key from the secret key using PBKDF2
+    """
+    salt = os.getenv("TOKEN_ENCRYPTION_SALT", "").encode()
+    
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100000,
+        backend=default_backend()
+    )
+    return base64.urlsafe_b64encode(kdf.derive(secret_key.encode()))
+
+def encrypt_token(token: str) -> str:
+    """
+    Encrypt a token string using Fernet symmetric encryption
+    """
+    key = get_encryption_key(SECRET_KEY)
+    fernet = Fernet(key)
+    return fernet.encrypt(token.encode()).decode()
+
+def decrypt_token(encrypted_token: str) -> str:
+    """
+    Decrypt a token string using Fernet symmetric encryption
+    """
+    key = get_encryption_key(SECRET_KEY)
+    fernet = Fernet(key)
+    return fernet.decrypt(encrypted_token.encode()).decode()
 
 @dataclass
 class ThoughtStep:
@@ -149,22 +185,32 @@ class DatabaseCacheHandler(CacheHandler):
             
             if not token_data:
                 return None
+            
+            try:
+                access_token = decrypt_token(token_data["access_token"])
+                refresh_token = decrypt_token(token_data["refresh_token"])
+            except Exception as e:
+                access_token = token_data["access_token"]
+                refresh_token = token_data["refresh_token"]
                 
             return {
-                "access_token": token_data["access_token"],
-                "refresh_token": token_data["refresh_token"],
+                "access_token": access_token,
+                "refresh_token": refresh_token,
                 "expires_at": token_data["expires_at"],
                 "token_type": "Bearer",
                 "scope": " ".join(SPOTIFY_SCOPES)
             }
     
     def save_token_to_cache(self, token_info):
-        """Save token to database"""
+        """Save token to database with encryption"""
         if not self.user_id:
             return
             
         with get_db_connection() as conn:
             cursor = conn.cursor()
+            
+            encrypted_access_token = encrypt_token(token_info["access_token"])
+            encrypted_refresh_token = encrypt_token(token_info["refresh_token"])
             
             cursor.execute(
                 """
@@ -174,8 +220,8 @@ class DatabaseCacheHandler(CacheHandler):
                 """,
                 (
                     self.user_id,
-                    token_info["access_token"],
-                    token_info["refresh_token"],
+                    encrypted_access_token,
+                    encrypted_refresh_token,
                     token_info["expires_at"]
                 )
             )
@@ -1195,6 +1241,43 @@ def get_client_ip():
         ip = request.remote_addr
     return ip
 
+def migrate_existing_tokens():
+    """Migrate existing plaintext tokens to encrypted format"""
+    print("Checking for tokens that need encryption...")
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT user_id, access_token, refresh_token FROM spotify_tokens")
+        tokens = cursor.fetchall()
+        
+        updated_count = 0
+        for token in tokens:
+            user_id = token['user_id']
+            access_token = token['access_token']
+            refresh_token = token['refresh_token']
+            
+            try:
+                decrypt_token(access_token)
+            except:
+                print(f"Encrypting tokens for user {user_id}")
+                encrypted_access = encrypt_token(access_token)
+                encrypted_refresh = encrypt_token(refresh_token)
+                
+                cursor.execute(
+                    """
+                    UPDATE spotify_tokens 
+                    SET access_token = ?, refresh_token = ?
+                    WHERE user_id = ?
+                    """,
+                    (encrypted_access, encrypted_refresh, user_id)
+                )
+                updated_count += 1
+                
+        conn.commit()
+        if updated_count > 0:
+            print(f"Successfully encrypted {updated_count} tokens")
+        else:
+            print("No tokens needed encryption")
+
 @app.route('/api/query', methods=['POST'])
 def process_query():
     data = request.json
@@ -1566,5 +1649,6 @@ def serve_static(path):
     return send_from_directory('static', path)
 
 if __name__ == "__main__":
+    migrate_existing_tokens()
     is_production = os.getenv("PRODUCTION", "false").lower() == "true"
     app.run(debug=(not is_production), port=5300, host='0.0.0.0')

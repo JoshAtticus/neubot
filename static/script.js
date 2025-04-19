@@ -6,14 +6,102 @@ document.addEventListener('DOMContentLoaded', function() {
     const signInBanner = document.getElementById('sign-in-banner');
     const closeBannerBtn = document.getElementById('close-banner');
     const userProfileImg = document.getElementById('user-profile-img');
+    const inputAreaContainer = document.querySelector('.input-area-container');
     
     let activeDetailsToggle = null;
     let highlightEnabled = false;
     let sendButtonEnabled = false;
     let isUserAuthenticated = false;
+    let initialWindowHeight = window.innerHeight;
+    let visualViewportSupported = 'visualViewport' in window;
+    let isAndroid = /Android/i.test(navigator.userAgent);
     
-    // Initialize banner visibility based on localStorage
     const bannerDismissed = localStorage.getItem('neubot_banner_dismissed') === 'true';
+    
+    function detectVirtualKeyboard() {
+        if (window.innerWidth <= 1024) {
+            if (visualViewportSupported) {
+                const heightDifference = initialWindowHeight - window.visualViewport.height;
+                const isKeyboardOpen = heightDifference > 150;
+                
+                if (isKeyboardOpen) {
+                    document.body.classList.add('keyboard-open');
+                    
+                    if (isAndroid) {
+                        const viewportBottom = window.visualViewport.offsetTop + window.visualViewport.height;
+                        inputAreaContainer.style.bottom = `${window.innerHeight - viewportBottom}px`;
+                    }
+                    
+                    setTimeout(scrollToBottom, 100);
+                } else {
+                    document.body.classList.remove('keyboard-open');
+                    if (isAndroid) {
+                        inputAreaContainer.style.bottom = '0';
+                    }
+                }
+            } 
+            else {
+                const heightDifference = initialWindowHeight - window.innerHeight;
+                const isKeyboardOpen = heightDifference > 150;
+                
+                if (isKeyboardOpen) {
+                    document.body.classList.add('keyboard-open');
+                    setTimeout(scrollToBottom, 100);
+                } else {
+                    document.body.classList.remove('keyboard-open');
+                }
+            }
+        }
+    }
+    
+    window.addEventListener('orientationchange', function() {
+        setTimeout(() => {
+            initialWindowHeight = window.innerHeight;
+            if (visualViewportSupported && window.visualViewport) {
+                initialWindowHeight = window.visualViewport.height;
+            }
+        }, 300);
+    });
+
+    if (visualViewportSupported) {
+        window.visualViewport.addEventListener('resize', function() {
+            detectVirtualKeyboard();
+        });
+        
+        window.visualViewport.addEventListener('scroll', function() {
+            if (isAndroid && document.body.classList.contains('keyboard-open')) {
+                const viewportBottom = window.visualViewport.offsetTop + window.visualViewport.height;
+                inputAreaContainer.style.bottom = `${window.innerHeight - viewportBottom}px`;
+            }
+        });
+    } else {
+        window.addEventListener('resize', function() {
+            detectVirtualKeyboard();
+        });
+    }
+    
+    queryInput.addEventListener('focus', function() {
+        if (window.innerWidth <= 1024) {
+            document.body.classList.add('keyboard-open');
+            setTimeout(() => {
+                scrollToBottom();
+                if (isAndroid) {
+                    setTimeout(scrollToBottom, 500);
+                }
+            }, 300);
+        }
+    });
+    
+    queryInput.addEventListener('blur', function() {
+        if (window.innerWidth <= 1024) {
+            setTimeout(() => {
+                document.body.classList.remove('keyboard-open');
+                if (isAndroid) {
+                    inputAreaContainer.style.bottom = '0';
+                }
+            }, 100);
+        }
+    });
     
     function loadSettings() {
         const savedHighlight = localStorage.getItem('neubot_highlight_enabled');
@@ -117,7 +205,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const messageDiv = document.createElement('div');
         messageDiv.className = 'message user';
         
-        // Use the user's profile picture if authenticated
         const userImgSrc = isUserAuthenticated && userProfileImg.src ? userProfileImg.src : "user-icon.svg";
         
         messageDiv.innerHTML = `
@@ -327,37 +414,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const settingsModal = document.getElementById('settings-modal');
     const closeModalBtn = document.querySelector('.close-modal');
     const sidebarItems = document.querySelectorAll('.sidebar-item');
-
-    const h1 = document.querySelector('h1');
-    const settingsBtn = document.createElement('button');
-    settingsBtn.className = 'settings-button';
-    settingsBtn.innerHTML = '⚙️';
-    h1.appendChild(settingsBtn);
-
-    const style = document.createElement('style');
-    style.textContent = `
-        .settings-button {
-            background: none;
-            border: none;
-            color: #fff;
-            font-size: 24px;
-            cursor: pointer;
-            padding: 5px;
-            margin-left: 10px;
-            transition: transform 0.3s;
-        }
-        .settings-button:hover {
-            transform: rotate(90deg);
-        }
-    `;
-    document.head.appendChild(style);
+    const settingsBtn = document.getElementById('settings-button');
 
     settingsBtn.addEventListener('click', () => {
         settingsModal.style.display = 'block';
         setTimeout(() => {
             settingsModal.classList.add('open');
             
-            // Select the account tab by default
             sidebarItems.forEach(i => i.classList.remove('active'));
             document.querySelector('.sidebar-item[data-panel="account"]').classList.add('active');
             
@@ -454,10 +517,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const sidebarAccountName = document.getElementById('sidebar-account-name');
             const sidebarAccountEmail = document.getElementById('sidebar-account-email');
             
-            // Update authentication state
             isUserAuthenticated = userInfo.authenticated;
             
-            // Handle user profile image in the chat interface
             if (userProfileImg) {
                 if (isUserAuthenticated && userInfo.user.profile_pic) {
                     userProfileImg.src = userInfo.user.profile_pic;
@@ -468,7 +529,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             
-            // Handle sign-in banner visibility for non-authenticated users
             if (signInBanner) {
                 if (!isUserAuthenticated && !bannerDismissed) {
                     signInBanner.style.display = 'flex';
@@ -477,7 +537,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             
-            // Update sidebar account display
             if (sidebarAvatarImg && sidebarAccountName && sidebarAccountEmail) {
                 if (isUserAuthenticated && userInfo.user) {
                     sidebarAvatarImg.src = userInfo.user.profile_pic || "user-icon.svg";
@@ -490,7 +549,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             
-            // Update user info in settings panel
             if (userInfo.authenticated) {
                 accountLoggedIn.style.display = 'block';
                 accountLoggedOut.style.display = 'none';
@@ -538,7 +596,6 @@ document.addEventListener('DOMContentLoaded', function() {
         updateSendButtonVisibility();
     });
     
-    // Handle sign-in banner close button
     if (closeBannerBtn) {
         closeBannerBtn.addEventListener('click', function() {
             signInBanner.style.display = 'none';

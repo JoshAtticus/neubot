@@ -19,9 +19,9 @@
     font-style: normal;
 }
 
-/* Global responsive foundation */
 html {
     box-sizing: border-box;
+    height: 100%;
 }
 
 *, *:before, *:after {
@@ -34,26 +34,40 @@ body {
     padding: 0;
     background-color: #1a1a1a;
     color: #fff;
-    overflow-x: hidden; /* Prevent horizontal scrolling */
-    min-height: 100vh;
+    overflow-x: hidden; 
+    height: 100%;
     width: 100%;
+    display: flex;
+    flex-direction: column;
 }
 
 .container {
     max-width: 900px;
     width: 100%;
     margin: 0 auto;
-    padding: 20px;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    height: 100vh;
+    position: relative;
+}
+
+.header-container {
+    grid-row: 1;
+    background-color: #1a1a1a;
+    padding: 20px 20px 10px 20px;
+    width: 100%;
+    z-index: 10;
+    position: relative;
     display: flex;
-    flex-direction: column;
-    min-height: 100vh;
+    justify-content: space-between;
+    align-items: center;
 }
 
 h1 {
     color: #fff;
     font-size: 48px;
     text-align: left;
-    margin-bottom: 30px;
+    margin: 0 0 15px 0;
     font-weight: 900;
     letter-spacing: 1px;
     text-transform: lowercase;
@@ -74,19 +88,28 @@ h1 {
 }
 
 .chat-container {
-    flex: 1;
+    grid-row: 2;
     overflow-y: auto;
-    margin-bottom: 20px;
-    padding-right: 10px;
     width: 100%;
+    padding: 0 20px;
+    margin: 10px 0;
+    scroll-behavior: smooth;
+}
+
+.input-area-container {
+    grid-row: 3;
+    background-color: #1a1a1a;
+    width: 100%;
+    z-index: 10;
+    padding: 10px 20px 20px 20px;
+    position: sticky;
+    bottom: 0;
 }
 
 .input-area {
     display: flex;
-    margin-bottom: 20px;
     align-items: center;
     position: relative;
-    padding-bottom: 10px;
     width: 100%;
 }
 
@@ -120,7 +143,7 @@ h1 {
     color: #fff;
     outline: none;
     transition: box-shadow 0.3s ease, background-color 0.3s ease;
-    width: calc(100% - 55px); /* Adjust width accounting for avatar */
+    width: calc(100% - 55px);
     max-width: 100%;
 }
 
@@ -175,7 +198,7 @@ h1 {
 .highlighted-query {
     font-size: 18px;
     margin-bottom: 5px;
-    word-break: break-word; /* Allow breaking long words */
+    word-break: break-word;
 }
 
 .query-indicator {
@@ -253,7 +276,7 @@ h2 {
     font-size: 18px;
     line-height: 1.5;
     min-height: 30px;
-    word-wrap: break-word; /* Ensure text wraps */
+    word-wrap: break-word;
 }
 
 .thinking-animation {
@@ -280,14 +303,16 @@ h2 {
     line-height: 1.5;
     animation: fadeIn 0.3s ease-out;
     max-width: 100%;
-    overflow-x: auto; /* Allow scrolling for code blocks */
+    overflow-x: auto;
+    position: relative;
+    z-index: 5;
 }
 
 .thought-step {
     margin-bottom: 10px;
     border-bottom: 1px solid #333;
     padding-bottom: 10px;
-    word-break: break-word; /* Break long words */
+    word-break: break-word;
 }
 
 .thought-step:last-child {
@@ -327,8 +352,8 @@ h2 {
 .message-content {
     flex: 1;
     padding-top: 5px;
-    width: calc(100% - 55px); /* Account for avatar width */
-    min-width: 0; /* Allow proper flex shrinking */
+    width: calc(100% - 55px);
+    min-width: 0;
 }
 
 .message.user .message-text {
@@ -370,9 +395,9 @@ h2 {
 .message-text {
     font-size: 18px;
     line-height: 1.4;
-    word-wrap: break-word; /* Enable word wrapping */
-    overflow-wrap: break-word; /* Modern version of word-wrap */
-    hyphens: auto; /* Enable hyphenation */
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
     width: 100%;
 }
 
@@ -936,15 +961,36 @@ input:focus + .toggle-slider {
     line-height: 1.5;
 }
 
-/* Mobile responsiveness improvements */
 @media (max-width: 768px) {
     h1 {
         font-size: 36px;
-        margin-bottom: 20px;
+        margin-bottom: 10px;
+    }
+    
+    .header-container {
+        padding: 15px 15px 5px 15px;
+    }
+    
+    .chat-container {
+        padding: 0 15px;
+    }
+    
+    .input-area-container {
+        padding: 5px 15px 15px 15px;
     }
     
     .container {
         padding: 10px;
+        padding-top: 15px;
+        padding-bottom: 15px;
+    }
+    
+    .header-container {
+        padding: 10px 10px 5px 10px;
+    }
+    
+    .input-area-container {
+        padding: 5px 10px 10px 10px;
     }
     
     .message-text {
@@ -976,11 +1022,11 @@ input:focus + .toggle-slider {
         padding: 0;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
-        scrollbar-width: none; /* Firefox */
+        scrollbar-width: none;
     }
     
     .sidebar-items::-webkit-scrollbar {
-        display: none; /* Chrome, Safari, Edge */
+        display: none;
     }
     
     .sidebar-item {
@@ -1034,7 +1080,6 @@ input:focus + .toggle-slider {
         margin-right: 0;
     }
     
-    /* Improve message display on small screens */
     .message {
         margin-bottom: 16px;
     }
@@ -1062,7 +1107,7 @@ input:focus + .toggle-slider {
     }
     
     .message-content {
-        width: calc(100% - 42px); /* Adjusted for smaller avatar */
+        width: calc(100% - 42px);
     }
     
     .thinking-animation {
@@ -1095,14 +1140,23 @@ input:focus + .toggle-slider {
     }
 }
 
-/* Even smaller screens adjustments */
 @media (max-width: 480px) {
     h1 {
         font-size: 28px;
+        margin-bottom: 5px;
+    }
+    
+    .header-container, 
+    .chat-container, 
+    .input-area-container {
+        padding-left: 10px;
+        padding-right: 10px;
     }
     
     .container {
         padding: 8px;
+        padding-top: 10px;
+        padding-bottom: 10px;
     }
     
     .message-text {
@@ -1244,13 +1298,12 @@ input:focus + .toggle-slider {
     color: #fff;
 }
 
-/* Add styles for the sign-in banner */
 .sign-in-banner {
     background-color: #2a2a2a;
     border-radius: 8px;
     padding: 12px 20px;
     margin-bottom: 15px;
-    display: none; /* Hidden by default, will show via JS for non-authenticated users */
+    display: none;
     justify-content: space-between;
     align-items: center;
     animation: fadeIn 0.3s ease-out;
@@ -1344,13 +1397,11 @@ input:focus + .toggle-slider {
     margin: 8px 0 15px 0;
 }
 
-/* Override for the account panel */
 #account-panel h3 {
     font-size: 24px;
     margin: 0 0 10px 0;
 }
 
-/* Make the account panel display by default */
 .modal.open .modal-content #account-panel.panel {
     opacity: 1;
     transform: translateX(0);
@@ -1440,4 +1491,94 @@ input:focus + .toggle-slider {
     text-transform: uppercase;
     font-family: 'Segoe UI', sans-serif;
     letter-spacing: 0.5px;
+}
+
+.settings-button {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 5px;
+    transition: transform 0.3s;
+}
+
+.settings-button:hover {
+    transform: rotate(90deg);
+}
+
+body.keyboard-open {
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+}
+
+body.keyboard-open .container {
+    height: auto;
+    padding-bottom: 0;
+}
+
+body.keyboard-open .chat-container {
+    max-height: calc(100vh - 180px);
+    overflow-y: auto;
+    padding-bottom: 60px; 
+}
+
+
+body.keyboard-open .input-area-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin: 0 auto;
+    padding-bottom: 5px;
+    background-color: #1a1a1a;
+    z-index: 100;
+}
+
+@supports (-webkit-touch-callout: none) and (not (-webkit-appearance: none)) {
+    body.keyboard-open .chat-container {
+        height: calc(100% - 120px);
+    }
+    
+    body.keyboard-open .input-area-container {
+        position: fixed;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 100%;
+        max-width: 900px;
+    }
+}
+
+@supports (-webkit-appearance: none) {
+    body.keyboard-open {
+        position: fixed;
+        width: 100%;
+    }
+    
+    body.keyboard-open .header-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+    }
+    
+    body.keyboard-open .chat-container {
+        padding-top: 70px;
+        height: calc(100vh - 130px);
+        max-height: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 60px;
+        overflow-y: auto;
+    }
+    
+    body.keyboard-open .input-area-container {
+        background-color: #1a1a1a;
+        padding-top: 10px;
+        max-width: 900px;
+    }
 }

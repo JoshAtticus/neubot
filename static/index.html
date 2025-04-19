@@ -12,29 +12,36 @@
 
 <body>
     <div class="container">
-        <h1>neubot</h1>
+        <div class="header-container">
+            <h1>neubot</h1>
+            <button id="settings-button" class="settings-button">
+                <i class="fas fa-cog"></i>
+            </button>
+        </div>
 
         <div class="chat-container" id="chat-container">
+            <!-- Chat messages will be inserted here -->
         </div>
 
-        <!-- Add sign-in banner above input area -->
-        <div class="sign-in-banner" id="sign-in-banner">
-            <span>Sign in to get more queries per month and enhanced features</span>
-            <div class="banner-actions">
-                <a href="/login">Sign in</a>
-                <button id="close-banner" class="close-banner">×</button>
+        <div class="input-area-container">
+            <div class="sign-in-banner" id="sign-in-banner">
+                <span>Sign in to get more queries per month and enhanced features</span>
+                <div class="banner-actions">
+                    <a href="/login">Sign in</a>
+                    <button id="close-banner" class="close-banner">×</button>
+                </div>
             </div>
-        </div>
 
-        <div class="input-area">
-            <div class="avatar" id="user-avatar-container">
-                <img src="user-icon.svg" alt="User" id="user-profile-img">
+            <div class="input-area">
+                <div class="avatar" id="user-avatar-container">
+                    <img src="user-icon.svg" alt="User" id="user-profile-img">
+                </div>
+                <input type="text" id="query-input" placeholder="type something to neubot...">
+                <button id="send-button"><i class="fas fa-paper-plane"></i></button>
             </div>
-            <input type="text" id="query-input" placeholder="type something to neubot...">
-            <button id="send-button"><i class="fas fa-paper-plane"></i></button>
+            
+            <div id="thinking-process"></div>
         </div>
-
-        <div id="thinking-process"></div>
 
         <div id="settings-modal" class="modal">
             <div class="modal-content">

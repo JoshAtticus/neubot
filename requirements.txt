@@ -9,3 +9,4 @@ authlib
 requests-oauthlib
 spotipy
 flask-wtf
+cryptography
