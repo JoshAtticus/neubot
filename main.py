@@ -1139,7 +1139,6 @@ class SemanticParser:
                 status = "playing" if is_playing else "paused"
                 self._add_thought("Current track info", {"track": track['name'], "artist": artists, "status": status})
                 
-                # Return structured Spotify track data
                 return json.dumps({
                     "type": "spotify_track",
                     "track_name": track['name'],
@@ -1164,13 +1163,11 @@ class SemanticParser:
                 self._add_thought("Skipping to next track", None)
                 spotify.next_track()
                 
-                # Give Spotify a moment to update
                 time.sleep(1)
                 current = spotify.current_playback()
                 if current and current.get('item'):
                     track = current['item']
                     artists = ", ".join(artist['name'] for artist in track['artists'])
-                    # Return structured Spotify track data
                     album_art = track['album']['images'][0]['url'] if track['album']['images'] else None
                     track_url = track['external_urls']['spotify'] if 'external_urls' in track else None
                     
@@ -1190,13 +1187,11 @@ class SemanticParser:
                 self._add_thought("Going to previous track", None)
                 spotify.previous_track()
                 
-                # Give Spotify a moment to update
                 time.sleep(1) 
                 current = spotify.current_playback()
                 if current and current.get('item'):
                     track = current['item']
                     artists = ", ".join(artist['name'] for artist in track['artists'])
-                    # Return structured Spotify track data
                     album_art = track['album']['images'][0]['url'] if track['album']['images'] else None
                     track_url = track['external_urls']['spotify'] if 'external_urls' in track else None
                     
@@ -1249,12 +1244,10 @@ class SpotifyService:
             is_playing = current_playback['is_playing']
             device_name = current_playback.get('device', {}).get('name', 'Unknown device')
             
-            # Get album art
             album_art = None
             if track.get('album') and track['album'].get('images') and len(track['album']['images']) > 0:
                 album_art = track['album']['images'][0]['url']
                 
-            # Get track URL
             track_url = None
             if track.get('external_urls') and track['external_urls'].get('spotify'):
                 track_url = track['external_urls']['spotify']
@@ -1295,7 +1288,6 @@ class SpotifyService:
         except Exception as e:
             return False, str(e)
 
-# Singleton instance of SpotifyService
 _spotify_service = None
 
 def get_spotify_service():
