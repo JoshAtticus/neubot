@@ -1649,8 +1649,5 @@ def serve_static(path):
     return send_from_directory('static', path)
 
 if __name__ == "__main__":
-    migrate_existing_tokens()
     is_production = os.getenv("PRODUCTION", "false").lower() == "true"
     app.run(debug=(not is_production), port=5300, host='0.0.0.0')
-else:
-    migrate_existing_tokens()
