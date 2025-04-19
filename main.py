@@ -1649,5 +1649,9 @@ def serve_static(path):
     return send_from_directory('static', path)
 
 if __name__ == "__main__":
-    is_production = os.getenv("PRODUCTION", "false").lower() == "true"
-    app.run(debug=(not is_production), port=5300, host='0.0.0.0')
+    print("\033[91m\033[1mRunning in development mode, DO NOT USE FOR PRODUCTION\033[0m")
+    environment = "development"
+    app.run(debug=True, port=5300, host='0.0.0.0')
+else:
+    print("Running in production mode")
+    environment = "production"
