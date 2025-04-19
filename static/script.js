@@ -7,6 +7,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const closeBannerBtn = document.getElementById('close-banner');
     const userProfileImg = document.getElementById('user-profile-img');
     const inputAreaContainer = document.querySelector('.input-area-container');
+    const welcomeModal = document.getElementById('welcome-modal');
+    const closeWelcomeModalBtn = document.querySelector('.close-welcome-modal');
+    const welcomeStartButton = document.getElementById('welcome-start-button');
+    const exampleQuestions = document.querySelectorAll('.example-question');
     
     let activeDetailsToggle = null;
     let highlightEnabled = false;
@@ -17,6 +21,69 @@ document.addEventListener('DOMContentLoaded', function() {
     let isAndroid = /Android/i.test(navigator.userAgent);
     
     const bannerDismissed = localStorage.getItem('neubot_banner_dismissed') === 'true';
+    const welcomeModalSeen = localStorage.getItem('neubot_welcome_seen') === 'true';
+    
+    if (!welcomeModalSeen) {
+        welcomeModal.style.display = 'block';
+        setTimeout(() => {
+            welcomeModal.classList.add('open');
+        }, 10);
+    }
+    
+    if (closeWelcomeModalBtn) {
+        closeWelcomeModalBtn.addEventListener('click', () => {
+            welcomeModal.classList.remove('open');
+            setTimeout(() => {
+                welcomeModal.style.display = 'none';
+            }, 300);
+            localStorage.setItem('neubot_welcome_seen', 'true');
+        });
+    }
+    
+    if (welcomeStartButton) {
+        welcomeStartButton.addEventListener('click', () => {
+            welcomeModal.classList.remove('open');
+            setTimeout(() => {
+                welcomeModal.style.display = 'none';
+            }, 300);
+            localStorage.setItem('neubot_welcome_seen', 'true');
+            
+            setTimeout(() => {
+                queryInput.focus();
+            }, 400);
+        });
+    }
+    
+    exampleQuestions.forEach(question => {
+        question.addEventListener('click', () => {
+            const questionText = question.getAttribute('data-question');
+            
+            queryInput.value = questionText;
+            
+            welcomeModal.classList.remove('open');
+            setTimeout(() => {
+                welcomeModal.style.display = 'none';
+            }, 300);
+            localStorage.setItem('neubot_welcome_seen', 'true');
+            
+            setTimeout(() => {
+                queryInput.focus();
+                if (sendButtonEnabled) {
+                    sendButton.classList.add('visible');
+                }
+            }, 400);
+        });
+    });
+    
+    welcomeModal.addEventListener('click', (e) => {
+        if (e.target === welcomeModal) {
+            welcomeModal.classList.remove('open');
+            setTimeout(() => {
+                welcomeModal.style.display = 'none';
+            }, 300);
+            localStorage.setItem('neubot_welcome_seen', 'true');
+        }
+    });
     
     function detectVirtualKeyboard() {
         if (window.innerWidth <= 1024) {

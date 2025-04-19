@@ -998,7 +998,7 @@ input:focus + .toggle-slider {
     }
     
     .message-text {
-        font-size: 16px;
+        font-size: 18px;
     }
 
     #response-text {
@@ -1164,7 +1164,7 @@ input:focus + .toggle-slider {
     }
     
     .message-text {
-        font-size: 15px;
+        font-size: 18px;
     }
     
     #query-input {
@@ -2066,4 +2066,114 @@ select {
 
 .legal-link {
     color: #3B82F6;
+}
+
+.welcome-modal-content {
+    max-width: 500px;
+    padding: 0;
+    overflow: hidden;
+    border-radius: 12px;
+}
+
+.welcome-header {
+    background-color: #222;
+    padding: 20px;
+    text-align: center;
+    position: relative;
+    border-bottom: 1px solid #333;
+}
+
+.welcome-logo {
+    width: 60px;
+    height: 60px;
+    margin-bottom: 10px;
+}
+
+.welcome-header h2 {
+    margin: 0;
+    color: #fff;
+    font-size: 24px;
+}
+
+.close-welcome-modal {
+    position: absolute;
+    right: 15px;
+    top: 15px;
+    font-size: 24px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #888;
+}
+
+.close-welcome-modal:hover {
+    color: #fff;
+}
+
+.welcome-body {
+    padding: 20px;
+    background-color: #1a1a1a;
+}
+
+.welcome-body p {
+    margin-bottom: 20px;
+    font-size: 16px;
+    line-height: 1.6;
+    color: #bbb;
+}
+
+.welcome-body h3 {
+    margin: 20px 0 15px;
+    font-size: 18px;
+    color: #fff;
+}
+
+.example-questions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 30px;
+}
+
+.example-question {
+    background-color: #2a2a2a;
+    border-radius: 10px;
+    padding: 12px 15px;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.2s;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    color: #ddd;
+}
+
+.example-question i {
+    margin-right: 10px;
+    color: #3498db;
+}
+
+.example-question:hover {
+    background-color: #333;
+    transform: translateY(-2px);
+}
+
+.welcome-footer {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.welcome-button {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 12px 25px;
+    border-radius: 25px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.welcome-button:hover {
+    background-color: #2980b9;
 }
