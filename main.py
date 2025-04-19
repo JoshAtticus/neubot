@@ -1133,11 +1133,22 @@ class SemanticParser:
                 artists = ", ".join(artist['name'] for artist in track['artists'])
                 is_playing = current_playback['is_playing']
                 device_name = current_playback.get('device', {}).get('name', 'your device')
+                album_art = track['album']['images'][0]['url'] if track['album']['images'] else None
+                track_url = track['external_urls']['spotify'] if 'external_urls' in track else None
                 
                 status = "playing" if is_playing else "paused"
                 self._add_thought("Current track info", {"track": track['name'], "artist": artists, "status": status})
                 
-                return f"Currently {status} on {device_name}: \"{track['name']}\" by {artists}."
+                # Return structured Spotify track data
+                return json.dumps({
+                    "type": "spotify_track",
+                    "track_name": track['name'],
+                    "artist": artists,
+                    "album_art": album_art,
+                    "track_url": track_url,
+                    "is_playing": is_playing,
+                    "device": device_name
+                })
                 
             elif spotify_action == "play":
                 self._add_thought("Starting playback", None)
@@ -1153,12 +1164,25 @@ class SemanticParser:
                 self._add_thought("Skipping to next track", None)
                 spotify.next_track()
                 
+                # Give Spotify a moment to update
                 time.sleep(1)
                 current = spotify.current_playback()
                 if current and current.get('item'):
                     track = current['item']
                     artists = ", ".join(artist['name'] for artist in track['artists'])
-                    return f"Skipped to next track: \"{track['name']}\" by {artists}."
+                    # Return structured Spotify track data
+                    album_art = track['album']['images'][0]['url'] if track['album']['images'] else None
+                    track_url = track['external_urls']['spotify'] if 'external_urls' in track else None
+                    
+                    return json.dumps({
+                        "type": "spotify_track",
+                        "track_name": track['name'],
+                        "artist": artists,
+                        "album_art": album_art,
+                        "track_url": track_url,
+                        "is_playing": current.get('is_playing', True),
+                        "device": current.get('device', {}).get('name', 'your device')
+                    })
                 else:
                     return "Skipped to the next track."
                 
@@ -1166,12 +1190,25 @@ class SemanticParser:
                 self._add_thought("Going to previous track", None)
                 spotify.previous_track()
                 
+                # Give Spotify a moment to update
                 time.sleep(1) 
                 current = spotify.current_playback()
                 if current and current.get('item'):
                     track = current['item']
                     artists = ", ".join(artist['name'] for artist in track['artists'])
-                    return f"Went to previous track: \"{track['name']}\" by {artists}."
+                    # Return structured Spotify track data
+                    album_art = track['album']['images'][0]['url'] if track['album']['images'] else None
+                    track_url = track['external_urls']['spotify'] if 'external_urls' in track else None
+                    
+                    return json.dumps({
+                        "type": "spotify_track",
+                        "track_name": track['name'],
+                        "artist": artists,
+                        "album_art": album_art,
+                        "track_url": track_url,
+                        "is_playing": current.get('is_playing', True),
+                        "device": current.get('device', {}).get('name', 'your device')
+                    })
                 else:
                     return "Went to the previous track."
             
@@ -1189,6 +1226,84 @@ class SemanticParser:
                 return "This action requires a Spotify Premium subscription."
             else:
                 return f"There was an error controlling Spotify: {error_msg}"
+
+class SpotifyService:
+    """Service to handle Spotify-related functionality"""
+    
+    def __init__(self):
+        pass
+        
+    def get_current_track(self, user_id):
+        """Get information about the currently playing track"""
+        spotify = get_spotify_client(user_id)
+        if not spotify:
+            return None
+            
+        try:
+            current_playback = spotify.current_playback()
+            if not current_playback or not current_playback.get('item'):
+                return None
+                
+            track = current_playback['item']
+            artists = ", ".join(artist['name'] for artist in track['artists'])
+            is_playing = current_playback['is_playing']
+            device_name = current_playback.get('device', {}).get('name', 'Unknown device')
+            
+            # Get album art
+            album_art = None
+            if track.get('album') and track['album'].get('images') and len(track['album']['images']) > 0:
+                album_art = track['album']['images'][0]['url']
+                
+            # Get track URL
+            track_url = None
+            if track.get('external_urls') and track['external_urls'].get('spotify'):
+                track_url = track['external_urls']['spotify']
+                
+            return {
+                "track_name": track['name'],
+                "artist": artists,
+                "album_art": album_art,
+                "track_url": track_url,
+                "is_playing": is_playing,
+                "device": device_name
+            }
+        except Exception as e:
+            app.logger.error(f"Error getting current track: {str(e)}")
+            return None
+            
+    def control_playback(self, user_id, action):
+        """Control Spotify playback"""
+        spotify = get_spotify_client(user_id)
+        if not spotify:
+            return False, "Spotify not connected"
+            
+        try:
+            if action == "play":
+                spotify.start_playback()
+                return True, "Playback started"
+            elif action == "pause":
+                spotify.pause_playback()
+                return True, "Playback paused"
+            elif action == "next":
+                spotify.next_track()
+                return True, "Skipped to next track"
+            elif action == "previous":
+                spotify.previous_track()
+                return True, "Skipped to previous track"
+            else:
+                return False, f"Unknown action: {action}"
+        except Exception as e:
+            return False, str(e)
+
+# Singleton instance of SpotifyService
+_spotify_service = None
+
+def get_spotify_service():
+    """Get the singleton instance of SpotifyService"""
+    global _spotify_service
+    if _spotify_service is None:
+        _spotify_service = SpotifyService()
+    return _spotify_service
 
 app = Flask(__name__, static_folder='static')
 app.secret_key = SECRET_KEY
@@ -1574,35 +1689,35 @@ def spotify_disconnect():
     
     return jsonify({"success": True, "message": "Spotify disconnected successfully"})
 
-@app.route('/api/integrations/spotify/now-playing', methods=['GET'])
+@app.route('/api/integrations/spotify/now-playing')
 def spotify_now_playing():
-    """Get currently playing track info"""
     if not current_user.is_authenticated:
-        return jsonify({"error": "You need to login first"}), 401
+        return jsonify({"error": "Not authenticated"}), 401
     
-    spotify = get_spotify_client(current_user.id)
-    if not spotify:
-        return jsonify({"error": "Spotify not connected"}), 404
+    user_id = current_user.id
+    
+    spotify_service = get_spotify_service()
+    if not spotify_service:
+        return jsonify({"error": "Spotify service not available"}), 500
     
     try:
-        current_playback = spotify.current_playback()
-        if not current_playback:
-            return jsonify({"error": "No active playback detected"}), 404
+        current_track = spotify_service.get_current_track(user_id)
+        if not current_track:
+            return jsonify({"error": "No track playing"}), 404
         
-        track = current_playback['item']
+        track_data = {
+            "track_name": current_track.get("track_name", "Unknown"),
+            "artist": current_track.get("artist", "Unknown"),
+            "album_art": current_track.get("album_art"),
+            "track_url": current_track.get("track_url", "https://open.spotify.com/"),
+            "is_playing": current_track.get("is_playing", False),
+            "device": current_track.get("device")
+        }
         
-        return jsonify({
-            "track_name": track['name'],
-            "artist": ", ".join(artist['name'] for artist in track['artists']),
-            "album": track['album']['name'],
-            "album_art": track['album']['images'][0]['url'] if track['album']['images'] else None,
-            "is_playing": current_playback['is_playing'],
-            "duration_ms": track['duration_ms'],
-            "progress_ms": current_playback['progress_ms'],
-            "device": current_playback['device']['name'] if 'device' in current_playback else None
-        })
+        return jsonify(track_data)
     except Exception as e:
-        return jsonify({"error": f"Error getting playback: {str(e)}"}), 500
+        app.logger.error(f"Error getting current track: {str(e)}")
+        return jsonify({"error": f"Failed to get current track: {str(e)}"}), 500
 
 @app.route('/api/integrations/spotify/control', methods=['POST'])
 @login_required

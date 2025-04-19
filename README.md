@@ -1,6 +1,8 @@
 # neubot
 a simple semantic parsing based chatbot (no llms here!)
 
+> [!Warning]
+
 ![banner](https://github.com/user-attachments/assets/c3f52133-1a6a-49e3-ba75-92c8583017fa)
 
 ![screenshot](https://github.com/user-attachments/assets/1620f8a0-359d-47ce-b870-8b312779825f)

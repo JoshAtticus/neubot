@@ -383,6 +383,11 @@
                                 </button>
                             </div>
                             <div class="device-info" id="device-info"></div>
+                            <div class="spotify-attribution">
+                                <a href="#" id="spotify-track-link" target="_blank">
+                                    Powered by <img src="https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_Green.png" alt="Spotify" height="16">
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -483,6 +488,14 @@
                             albumArtImg.src = data.album_art;
                         } else {
                             albumArtImg.src = 'https://via.placeholder.com/60?text=No+Image';
+                        }
+                        
+                        // Update Spotify attribution link
+                        const spotifyTrackLink = document.getElementById('spotify-track-link');
+                        if (data.track_url) {
+                            spotifyTrackLink.href = data.track_url;
+                        } else {
+                            spotifyTrackLink.href = 'https://open.spotify.com/';
                         }
                         
                         isPlaying = data.is_playing;

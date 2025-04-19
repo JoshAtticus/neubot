@@ -230,38 +230,79 @@ document.addEventListener('DOMContentLoaded', function() {
         const detailsId = 'details-' + Date.now();
         const toggleId = 'toggle-' + Date.now();
         
+        // Check if this is a special message type
         let searchResults = null;
+        let spotifyData = null;
+        
         try {
             const data = JSON.parse(text);
             if (data.type === 'search_results') {
                 searchResults = data;
+            } else if (data.type === 'spotify_track') {
+                spotifyData = data;
             }
         } catch (e) {
-            // no results, just a normal message so move on, there are 100% better ways to do this but idrc
+            // Not JSON, just a regular text message
         }
-        
-        let messageContent;
-        if (searchResults) {
-            messageContent = formatSearchResults(searchResults);
-        } else {
-            messageContent = `<div class="message-text">${text}</div>`;
-        }
-        
-        messageDiv.innerHTML = `
+
+        // Create the bot icon and message info section (always the same)
+        const messageHTML = `
             <div class="bot-icon"><img src="neubot-icon.svg" alt="Bot"></div>
             <div class="message-content">
                 <div class="message-info">
                     Completed ${stepsCount} steps
                     <span class="see-details" id="${toggleId}">See details</span>
                 </div>
-                ${messageContent}
-                <div id="${detailsId}" class="thinking-process" style="display: none;"></div>
             </div>
         `;
         
+        messageDiv.innerHTML = messageHTML;
+        
+        const messageContent = messageDiv.querySelector('.message-content');
+        
+        // Now add the actual message content based on type
+        if (searchResults) {
+            // Search results case
+            const searchResultsDiv = document.createElement('div');
+            searchResultsDiv.innerHTML = formatSearchResults(searchResults);
+            messageContent.appendChild(searchResultsDiv);
+        } else if (spotifyData) {
+            // Spotify track case - create a text message first
+            const textMessage = document.createElement('div');
+            textMessage.className = 'message-text';
+            
+            let statusText = spotifyData.is_playing ? "Currently playing" : "Currently paused";
+            textMessage.textContent = `${statusText}: "${spotifyData.track_name}" by ${spotifyData.artist}`;
+            messageContent.appendChild(textMessage);
+            
+            // Now create and append the spotify player component
+            const trackData = {
+                trackName: spotifyData.track_name,
+                artist: spotifyData.artist,
+                albumArt: spotifyData.album_art,
+                trackUrl: spotifyData.track_url
+            };
+            
+            const playerElement = createSpotifyPlayerForChat(trackData);
+            messageContent.appendChild(playerElement);
+        } else {
+            // Regular text message
+            const textMessage = document.createElement('div');
+            textMessage.className = 'message-text';
+            textMessage.innerHTML = text;
+            messageContent.appendChild(textMessage);
+        }
+        
+        // Create and add the details section
+        const detailsElement = document.createElement('div');
+        detailsElement.id = detailsId;
+        detailsElement.className = 'thinking-process';
+        detailsElement.style.display = 'none';
+        messageContent.appendChild(detailsElement);
+        
+        // Add to chat and set up event listeners
         chatContainer.appendChild(messageDiv);
         
-        const detailsElement = document.getElementById(detailsId);
         displayThoughtProcess(thoughts, detailsElement);
         
         const toggleElement = document.getElementById(toggleId);
@@ -608,3 +649,50 @@ document.addEventListener('DOMContentLoaded', function() {
     updateUserInfo();
     updateRateLimits();
 });
+
+function createSpotifyPlayerForChat(trackData) {
+    const playerContainer = document.createElement('div');
+    playerContainer.className = 'spotify-player-chat';
+    
+    const albumArt = document.createElement('div');
+    albumArt.className = 'spotify-album-art';
+    
+    const albumImg = document.createElement('img');
+    albumImg.src = trackData.albumArt || 'https://via.placeholder.com/60?text=No+Image';
+    albumImg.alt = 'Album Art';
+    albumArt.appendChild(albumImg);
+    
+    const trackInfo = document.createElement('div');
+    trackInfo.className = 'spotify-track-info';
+    
+    const trackName = document.createElement('div');
+    trackName.className = 'spotify-track-name';
+    trackName.textContent = trackData.trackName;
+    trackInfo.appendChild(trackName);
+    
+    const artistName = document.createElement('div');
+    artistName.className = 'spotify-track-artist';
+    artistName.textContent = trackData.artist;
+    trackInfo.appendChild(artistName);
+    
+    const attribution = document.createElement('div');
+    attribution.className = 'spotify-attribution';
+    
+    const spotifyLink = document.createElement('a');
+    spotifyLink.href = trackData.trackUrl || 'https://open.spotify.com/';
+    spotifyLink.target = '_blank';
+    spotifyLink.textContent = 'Powered by ';
+    
+    const spotifyLogo = document.createElement('img');
+    spotifyLogo.src = 'https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_Green.png';
+    spotifyLogo.alt = 'Spotify';
+    
+    spotifyLink.appendChild(spotifyLogo);
+    attribution.appendChild(spotifyLink);
+    trackInfo.appendChild(attribution);
+    
+    playerContainer.appendChild(albumArt);
+    playerContainer.appendChild(trackInfo);
+    
+    return playerContainer;
+}
