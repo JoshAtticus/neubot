@@ -10,3 +10,4 @@ requests-oauthlib
 spotipy
 flask-wtf
 cryptography
+gunicorn
