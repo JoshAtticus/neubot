@@ -2181,3 +2181,18 @@ select {
 .welcome-button:hover {
     background-color: #2980b9;
 }
+
+.close-whats-new-modal {
+    position: absolute;
+    right: 15px;
+    top: 15px;
+    font-size: 24px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #888;
+}
+
+.close-whats-new-modal:hover {
+    color: #fff;
+}

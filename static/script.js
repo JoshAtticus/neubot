@@ -11,6 +11,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const closeWelcomeModalBtn = document.querySelector('.close-welcome-modal');
     const welcomeStartButton = document.getElementById('welcome-start-button');
     const exampleQuestions = document.querySelectorAll('.example-question');
+    const whatsNewModal = document.getElementById('whats-new-modal');
+    const closeWhatsNewModalBtn = document.querySelector('.close-whats-new-modal');
+    const whatsNewGotItButton = document.getElementById('whats-new-got-it-button');
     
     let activeDetailsToggle = null;
     let highlightEnabled = false;
@@ -22,11 +25,18 @@ document.addEventListener('DOMContentLoaded', function() {
     
     const bannerDismissed = localStorage.getItem('neubot_banner_dismissed') === 'true';
     const welcomeModalSeen = localStorage.getItem('neubot_welcome_seen') === 'true';
+    const whatsNewModalSeen = localStorage.getItem('neubot_whats_new_20250422_seen') === 'true';
     
     if (!welcomeModalSeen) {
         welcomeModal.style.display = 'block';
         setTimeout(() => {
             welcomeModal.classList.add('open');
+        }, 10);
+    } 
+    else if (welcomeModalSeen && !whatsNewModalSeen) {
+        whatsNewModal.style.display = 'block';
+        setTimeout(() => {
+            whatsNewModal.classList.add('open');
         }, 10);
     }
     
@@ -39,6 +49,40 @@ document.addEventListener('DOMContentLoaded', function() {
             localStorage.setItem('neubot_welcome_seen', 'true');
         });
     }
+    
+    if (closeWhatsNewModalBtn) {
+        closeWhatsNewModalBtn.addEventListener('click', () => {
+            whatsNewModal.classList.remove('open');
+            setTimeout(() => {
+                whatsNewModal.style.display = 'none';
+            }, 300);
+            localStorage.setItem('neubot_whats_new_20250422_seen', 'true');
+        });
+    }
+    
+    if (whatsNewGotItButton) {
+        whatsNewGotItButton.addEventListener('click', () => {
+            whatsNewModal.classList.remove('open');
+            setTimeout(() => {
+                whatsNewModal.style.display = 'none';
+            }, 300);
+            localStorage.setItem('neubot_whats_new_20250422_seen', 'true');
+            
+            setTimeout(() => {
+                queryInput.focus();
+            }, 400);
+        });
+    }
+    
+    whatsNewModal.addEventListener('click', (e) => {
+        if (e.target === whatsNewModal) {
+            whatsNewModal.classList.remove('open');
+            setTimeout(() => {
+                whatsNewModal.style.display = 'none';
+            }, 300);
+            localStorage.setItem('neubot_whats_new_20250422_seen', 'true');
+        }
+    });
     
     if (welcomeStartButton) {
         welcomeStartButton.addEventListener('click', () => {
@@ -60,11 +104,19 @@ document.addEventListener('DOMContentLoaded', function() {
             
             queryInput.value = questionText;
             
-            welcomeModal.classList.remove('open');
-            setTimeout(() => {
-                welcomeModal.style.display = 'none';
-            }, 300);
-            localStorage.setItem('neubot_welcome_seen', 'true');
+            if (welcomeModal.style.display === 'block') {
+                welcomeModal.classList.remove('open');
+                setTimeout(() => {
+                    welcomeModal.style.display = 'none';
+                }, 300);
+                localStorage.setItem('neubot_welcome_seen', 'true');
+            } else if (whatsNewModal.style.display === 'block') {
+                whatsNewModal.classList.remove('open');
+                setTimeout(() => {
+                    whatsNewModal.style.display = 'none';
+                }, 300);
+                localStorage.setItem('neubot_whats_new_20250422_seen', 'true');
+            }
             
             setTimeout(() => {
                 queryInput.focus();
