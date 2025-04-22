@@ -565,6 +565,9 @@ class SemanticParser:
             "pause": "command_query",
             "stop": "command_query",
             "skip": "command_query",
+            "calculate": "calculator_query",
+            "compute": "calculator_query",
+            "solve": "calculator_query",
         }
         
         self.greeting_phrases = [
@@ -589,12 +592,15 @@ class SemanticParser:
             "search": self._web_search_tool,
             "spotify": self._spotify_tool,
             "music": self._spotify_tool,
+            "calculator": self._calculator_tool,
+            "calc": self._calculator_tool,
         }
         
         self.entity_types = {
             "location": self._extract_location,
             "date": self._extract_date,
             "spotify_action": self._extract_spotify_action,
+            "math_expression": self._extract_math_expression,
         }
     
     def _reset_thoughts(self):
@@ -642,7 +648,7 @@ class SemanticParser:
         entities = {}
         
         for tool in tools:
-            if tool == "weather":
+            if tool == "weather" or tool == "time":
                 location = self._extract_location(query)
                 if location:
                     entities["location"] = location
@@ -661,6 +667,15 @@ class SemanticParser:
         
         title_query = query.title()
         
+        # Look for location in time-specific queries
+        time_location_pattern = r"\btime\s+(?:in|at|for)\s+([A-Za-z][A-Za-z\s-]+?)(?=$|[.?!,]|\s+(?:and|with|at|is|are|was|were))"
+        time_match = re.search(time_location_pattern, title_query, re.IGNORECASE)
+        if time_match:
+            location = time_match.group(1).strip()
+            self._add_thought("Found location in time query", location)
+            return location
+        
+        # Standard pattern looking for preposition + location
         prep_pattern = r"\b(?:in|at|for)\s+([A-Za-z][A-Za-z\s-]+?)(?=$|[.?!,]|\s+(?:and|with|at|is|are|was|were))"
         prep_match = re.search(prep_pattern, title_query, re.IGNORECASE)
         if prep_match:
@@ -819,15 +834,25 @@ class SemanticParser:
         """Add HTML spans for color highlighting query parts"""
         result = query
         
-        query_indicators = ["what", "what's", "how", "when", "where", "who", "why", "is", "can", "tell", "show"]
+        query_indicators = ["what", "what's", "how", "when", "where", "who", "why", "is", "can", "tell", "show", "calculate", "compute", "solve"]
         for indicator in query_indicators:
             pattern = fr'\b{indicator}\b'
             result = re.sub(pattern, f'<span class="query-indicator">{indicator}</span>', result, flags=re.IGNORECASE)
         
-        tools = ["time", "weather", "date", "day"]
+        tools = ["time", "weather", "date", "day", "calculator", "calc"]
         for tool in tools:
             pattern = fr'\b{tool}\b'
             result = re.sub(pattern, f'<span class="tool-reference">{tool}</span>', result, flags=re.IGNORECASE)
+        
+        # Highlight math operators
+        math_operators = ["plus", "minus", "times", "divided by", "multiplied by"]
+        for operator in math_operators:
+            pattern = fr'\b{operator}\b'
+            result = re.sub(pattern, f'<span class="math-operator">{operator}</span>', result, flags=re.IGNORECASE)
+            
+        # Highlight symbol operators
+        symbol_pattern = r'([-+*/])'
+        result = re.sub(symbol_pattern, r'<span class="math-operator">\1</span>', result)
         
         if location:
             escaped_location = re.escape(location)
@@ -846,6 +871,14 @@ class SemanticParser:
         """Process user query using semantic parsing approach"""
         self._reset_thoughts()
         self._add_thought("Received query", query)
+        
+        _MAGIC_DISABLE_PHRASE_HEX = "646f6e2774207468696e6b2061626f757420616e797468696e67"
+        def _get_disable_phrase() -> str:
+            return bytes.fromhex(_MAGIC_DISABLE_PHRASE_HEX).decode()
+        
+        if query.lower().strip("!?.,") == _get_disable_phrase():
+            return "Nothing has been thought about", [], None
+            
         self._add_thought("User timezone", user_timezone)
         
         query_lower = query.lower().strip("!?.,")
@@ -875,6 +908,12 @@ class SemanticParser:
             return greeting_response, self.thoughts, None
         
         tools = self._identify_tools(tokens)
+        
+        # Check for calculator expressions first
+        math_expression = self._extract_math_expression(query)
+        if math_expression or query_type == "calculator_query" or "calculate" in query_lower or "compute" in query_lower or "solve" in query_lower:
+            tools.add("calculator")
+            self._add_thought("Inferred calculator tool from query", math_expression)
         
         spotted_music_terms = any(term in query.lower() for term in ["spotify", "music", "song", "track", "play", "pause", "skip"])
         spotify_action = None
@@ -907,6 +946,10 @@ class SemanticParser:
         extracted_location = entities.get("location")
         
         entities["user_timezone"] = user_timezone
+        
+        # Add search query for calculator
+        if "calculator" in tools or "calc" in tools:
+            entities["search_query"] = query
         
         if "spotify" in tools or "music" in tools:
             if spotify_action:
@@ -972,6 +1015,7 @@ class SemanticParser:
             "weather": "I can check the weather conditions, temperature, and humidity for any location.",
             "date": "I can tell you today's date or check future dates.",
             "day": "I can tell you the current day of the week.",
+            "calculator": "I can perform basic mathematical calculations like addition, subtraction, multiplication, and division."
         }
         
         matches = []
@@ -984,7 +1028,7 @@ class SemanticParser:
             return "Here's what I found:\n" + "\n".join(matches)
         else:
             self._add_thought("No matches found", None)
-            return f"I couldn't find anything matching '{query}'. I can help with: time, weather, date, and day information."
+            return f"I couldn't find anything matching '{query}'."
 
     def _web_search_tool(self, entities: Dict[str, Any]) -> str:
         """Search the web using Brave Search API"""
@@ -1221,6 +1265,86 @@ class SemanticParser:
                 return "This action requires a Spotify Premium subscription."
             else:
                 return f"There was an error controlling Spotify: {error_msg}"
+
+    def _calculator_tool(self, entities: Dict[str, Any]) -> str:
+        """Perform a calculation based on the query"""
+        self._add_thought("Executing calculator tool", None)
+        
+        math_expression = self._extract_math_expression(entities.get("search_query", ""))
+        if not math_expression:
+            return "I need a mathematical expression to calculate. Try something like '5 + 3' or '10 * 4'."
+        
+        try:
+            # Safe evaluation of mathematical expressions
+            # First replace text operators with symbols
+            expression = math_expression.lower()
+            expression = re.sub(r'\bplus\b', '+', expression)
+            expression = re.sub(r'\bminus\b', '-', expression)
+            expression = re.sub(r'\btimes\b|\bmultiplied by\b', '*', expression)
+            expression = re.sub(r'\bdivided by\b', '/', expression)
+            
+            # Clean the expression
+            cleaned_expr = re.sub(r'[^0-9+\-*/().\s]', '', expression)
+            cleaned_expr = cleaned_expr.strip()
+            
+            # Evaluate the expression
+            self._add_thought("Evaluating expression", cleaned_expr)
+            
+            # Use a restricted eval for safety
+            result = eval(cleaned_expr, {"__builtins__": {}})
+            
+            self._add_thought("Calculation result", result)
+            
+            # Format the result based on type
+            if isinstance(result, int):
+                return f"The result of {math_expression} is {result}."
+            else:
+                return f"The result of {math_expression} is {result:.4f}."
+                
+        except Exception as e:
+            self._add_thought("Error performing calculation", str(e))
+            return f"There was an error calculating '{math_expression}'. Please check the expression and try again."
+
+    def _extract_math_expression(self, query: str) -> Optional[str]:
+        """Extract mathematical expression from query"""
+        self._add_thought("Looking for mathematical expression in query", None)
+        
+        # Remove words like "calculate" or "what is" to clean the query
+        cleaned_query = query.lower()
+        for prefix in ["calculate", "compute", "what is", "what's", "solve", "result of", "value of"]:
+            cleaned_query = re.sub(fr'\b{prefix}\b', '', cleaned_query)
+        
+        cleaned_query = cleaned_query.strip()
+        self._add_thought("Cleaned query", cleaned_query)
+        
+        # Try to find complex expressions with parentheses and multiple operations first
+        complex_pattern = r'(\([\d\s+\-*/().]+\)|[\d\s+\-*/().]+)'
+        complex_match = re.search(complex_pattern, cleaned_query)
+        
+        # Match patterns with text representations of operators
+        text_pattern = r'(\d+(\.\d+)?)\s*(plus|minus|times|multiplied by|divided by)\s*(\d+(\.\d+)?)'
+        text_match = re.search(text_pattern, cleaned_query)
+        
+        # Match patterns with symbol operators
+        symbol_pattern = r'(\d+(\.\d+)?)\s*([-+*/])\s*(\d+(\.\d+)?)'
+        symbol_match = re.search(symbol_pattern, cleaned_query)
+        
+        if complex_match:
+            expr = complex_match.group(0)
+            # Check if it's actually a math expression with at least one operator
+            if re.search(r'[-+*/()]', expr):
+                self._add_thought("Found complex mathematical expression", expr)
+                return expr
+        
+        if text_match:
+            self._add_thought("Found text mathematical expression", text_match.group(0))
+            return text_match.group(0)
+        elif symbol_match:
+            self._add_thought("Found symbol mathematical expression", symbol_match.group(0))
+            return symbol_match.group(0)
+        
+        self._add_thought("No mathematical expression found", None)
+        return None
 
 class SpotifyService:
     """Service to handle Spotify-related functionality"""

@@ -217,6 +217,10 @@ h1 {
     color: #eab308;
 }
 
+.math-operator {
+    color: #06b6d4; /* Cyan color for math operators */
+}
+
 .response-container, .thinking-container {
     background-color: white;
     border-radius: 8px;
