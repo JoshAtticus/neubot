@@ -5,6 +5,7 @@ import sqlite3
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Any, Tuple, Set
 from flask import Flask, request, jsonify, send_from_directory, redirect, url_for, session
+from flask_cors import CORS
 import threading
 import os
 import pytz
@@ -1427,6 +1428,9 @@ app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = False  # ENSURE THIS IS TRUE FOR PRODUCTION
+
+# Enable CORS for all routes and origins
+CORS(app, origins="*", supports_credentials=True)
 
 login_manager = LoginManager()
 login_manager.init_app(app)

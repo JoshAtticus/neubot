@@ -3,6 +3,7 @@ timezonefinder
 geopy
 python-dotenv
 flask
+flask-cors
 requests
 flask-login
 authlib
