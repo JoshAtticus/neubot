@@ -641,7 +641,6 @@ class SemanticParser:
             self._add_thought("No specific tools referenced", None)
             
         return found_tools
-    
     def _extract_entities(self, query: str, tools: Set[str]) -> Dict[str, Any]:
         """Extract relevant entities based on identified tools"""
         self._add_thought("Extracting entities based on identified tools", list(tools))
@@ -658,6 +657,11 @@ class SemanticParser:
                 date_spec = self._extract_date(query)
                 if date_spec:
                     entities["date"] = date_spec
+            
+            if tool == "search":
+                search_query = self._extract_search_query(query)
+                if search_query:
+                    entities["search_query"] = search_query
         
         self._add_thought("Extracted entities", entities)
         return entities
@@ -1883,10 +1887,27 @@ def serve_static(path):
         return send_from_directory('static', 'index.html')
     return send_from_directory('static', path)
 
-if __name__ == "__main__":
-    print("\033[91m\033[1mRunning in development mode, DO NOT USE FOR PRODUCTION\033[0m")
-    environment = "development"
-    app.run(debug=True, port=5300, host='0.0.0.0')
-else:
-    print("Running in production mode")
-    environment = "production"
+def _extract_search_query(self, query: str) -> Optional[str]:
+        """Extract search terms from query by removing search indicators"""
+        self._add_thought("Looking for search terms in query", None)
+        
+        search_terms = query.lower()
+        
+        # Remove common search indicators
+        search_indicators = [
+            "search for", "search", "find", "look up", "show me", "get", 
+            "tell me about", "what is", "who is", "where is", "how is"
+        ]
+        
+        for indicator in search_indicators:
+            search_terms = search_terms.replace(indicator, "").strip()
+        
+        # Clean up extra whitespace
+        search_terms = " ".join(search_terms.split())
+        
+        if search_terms:
+            self._add_thought("Extracted search terms", search_terms)
+            return search_terms
+        
+        self._add_thought("No search terms found after removing indicators", None)
+        return None
