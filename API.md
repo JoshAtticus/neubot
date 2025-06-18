@@ -1,11 +1,11 @@
 # neubot API documentation
-comprehensive API reference for neubot's semantic parsing chatbot
+comprehensive API reference for neubot
 
 ![banner](https://github.com/user-attachments/assets/c3f52133-1a6a-49e3-ba75-92c8583017fa)
 
 ## base URL
 ```
-http://localhost:5300
+https://neubot.joshatticus.site/
 ```
 
 ## authentication
