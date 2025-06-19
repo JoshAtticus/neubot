@@ -1911,3 +1911,7 @@ def _extract_search_query(self, query: str) -> Optional[str]:
         
         self._add_thought("No search terms found after removing indicators", None)
         return None
+    
+if __name__ == '__main__':
+    print("\033[91mYOU ARE RUNNING THE SERVER IN DEBUG MODE! DO NOT USE THIS IN PRODUCTION!\033[0m")
+    app.run(debug=True, host='0.0.0.0', port=5300)
