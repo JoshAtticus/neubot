@@ -4,7 +4,7 @@ import requests
 import sqlite3
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Any, Tuple, Set
-from flask import Flask, request, jsonify, send_from_directory, redirect, url_for, session
+from flask import Flask, request, jsonify, send_from_directory, redirect, url_for, session, render_template
 from flask_cors import CORS
 import threading
 import os
@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 import time
 import uuid
 import secrets
+from urllib.parse import urlparse
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth, CacheHandler
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
@@ -155,6 +156,22 @@ def init_db():
             refresh_token TEXT NOT NULL,
             expires_at INTEGER NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+        ''')
+        cursor.execute("DROP TABLE IF EXISTS app_tokens")
+        cursor.execute('''
+        CREATE TABLE app_tokens (
+            token TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            created_at DATETIME NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+        ''')
+
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS app_auth_requests (
+            state TEXT PRIMARY KEY,
+            callback_url TEXT NOT NULL
         )
         ''')
         
@@ -877,7 +894,7 @@ class SemanticParser:
         self._reset_thoughts()
         self._add_thought("Received query", query)
         
-        _MAGIC_DISABLE_PHRASE_HEX = "646f6e2774207468696e6b2061626f757420616e797468696e67"
+        _MAGIC_DISABLE_PHRASE_HEX = "646f6f6e2774207468696e6b2061626f757420616e797468696e67"
         def _get_disable_phrase() -> str:
             return bytes.fromhex(_MAGIC_DISABLE_PHRASE_HEX).decode()
         
@@ -1426,7 +1443,7 @@ def get_spotify_service():
         _spotify_service = SpotifyService()
     return _spotify_service
 
-app = Flask(__name__, static_folder='static')
+app = Flask(__name__, static_folder='static', template_folder='static')
 app.secret_key = SECRET_KEY
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -1582,6 +1599,141 @@ def get_user_info():
 def login():
     """Show login options page"""
     return send_from_directory('static', 'login.html')
+
+@app.route('/login/app/')
+def login_app():
+    """Show app login options page"""
+    callback_url = request.args.get('callbackURL')
+    if not callback_url:
+        return "Missing callbackURL parameter", 400
+    
+    try:
+        parsed_url = urlparse(callback_url)
+        app_name = parsed_url.netloc or "the application"
+    except:
+        app_name = "an external application"
+
+    state = secrets.token_urlsafe(16)
+    
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO app_auth_requests (state, callback_url) VALUES (?, ?)", (state, callback_url))
+        conn.commit()
+
+    session['app_oauth_state'] = state
+    return render_template('app-login.html', app_name=app_name, user=current_user)
+
+@app.route('/login/app/google')
+def login_app_google():
+    """Login with Google OAuth for app"""
+    state = session.get('app_oauth_state')
+    if not state:
+        return "Invalid state, please start the login process again.", 400
+
+    redirect_uri = url_for('auth_app_google_callback', _external=True)
+    return oauth.google.authorize_redirect(redirect_uri, state=state)
+
+@app.route('/auth/app/google/callback')
+def auth_app_google_callback():
+    """Handle Google OAuth callback for app"""
+    state = session.pop('app_oauth_state', None)
+    callback_state = request.args.get('state')
+
+    if not state or state != callback_state:
+        return "Invalid authentication state. Please try again.", 403
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT callback_url FROM app_auth_requests WHERE state = ?", (state,))
+        auth_request = cursor.fetchone()
+        if not auth_request:
+            return "Invalid authentication request.", 403
+        callback_url = auth_request['callback_url']
+        cursor.execute("DELETE FROM app_auth_requests WHERE state = ?", (state,))
+        conn.commit()
+
+    token = oauth.google.authorize_access_token()
+    resp = oauth.google.get('https://www.googleapis.com/oauth2/v3/userinfo')
+    user_info = resp.json()
+    user_id = f"google_{user_info['sub']}"
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        if not cursor.fetchone():
+            cursor.execute(
+                "INSERT INTO users (id, name, email, provider, profile_pic) VALUES (?, ?, ?, ?, ?)",
+                (user_id, user_info.get('name'), user_info.get('email'), 'google', user_info.get('picture'))
+            )
+            conn.commit()
+
+    app_token = generate_app_token(user_id)
+    return redirect(callback_url.replace('[TOKEN]', app_token))
+
+@app.route('/login/app/github')
+def login_app_github():
+    """Login with GitHub OAuth for app"""
+    state = session.get('app_oauth_state')
+    if not state:
+        return "Invalid state, please start the login process again.", 400
+
+    redirect_uri = url_for('auth_app_github_callback', _external=True)
+    return oauth.github.authorize_redirect(redirect_uri, state=state)
+
+@app.route('/auth/app/github/callback')
+def auth_app_github_callback():
+    """Handle GitHub OAuth callback for app"""
+    state = session.pop('app_oauth_state', None)
+    callback_state = request.args.get('state')
+
+    if not state or state != callback_state:
+        return "Invalid authentication state. Please try again.", 403
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT callback_url FROM app_auth_requests WHERE state = ?", (state,))
+        auth_request = cursor.fetchone()
+        if not auth_request:
+            return "Invalid authentication request.", 403
+        callback_url = auth_request['callback_url']
+        cursor.execute("DELETE FROM app_auth_requests WHERE state = ?", (state,))
+        conn.commit()
+
+    token = oauth.github.authorize_access_token()
+    resp = oauth.github.get('https://api.github.com/user')
+    user_info = resp.json()
+    
+    email_resp = oauth.github.get('https://api.github.com/user/emails')
+    emails = email_resp.json()
+    primary_email = next((email['email'] for email in emails if email['primary']),
+                         emails[0]['email'] if emails else 'no-email@example.com')
+    
+    user_id = f"github_{user_info['id']}"
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        if not cursor.fetchone():
+            cursor.execute(
+                "INSERT INTO users (id, name, email, provider, profile_pic) VALUES (?, ?, ?, ?, ?)",
+                (user_id, user_info.get('name', user_info.get('login')), primary_email, 'github', user_info.get('avatar_url'))
+            )
+            conn.commit()
+
+    app_token = generate_app_token(user_id)
+    return redirect(callback_url.replace('[TOKEN]', app_token))
+
+def generate_app_token(user_id):
+    """Generate and store a new app token for a user"""
+    token = secrets.token_urlsafe(32)
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO app_tokens (token, user_id, created_at) VALUES (?, ?, ?)",
+            (token, user_id, datetime.now())
+        )
+        conn.commit()
+    return token
 
 @app.route('/login/google')
 def login_google():
@@ -1812,6 +1964,8 @@ def spotify_disconnect():
         conn.commit()
     
     return jsonify({"success": True, "message": "Spotify disconnected successfully"})
+
+
 
 @app.route('/api/integrations/spotify/now-playing')
 def spotify_now_playing():

@@ -8,29 +8,6 @@ comprehensive API reference for neubot
 https://neubot.joshatticus.site/
 ```
 
-## authentication
-neubot supports OAuth2 authentication with Google and GitHub. Authentication is optional for basic functionality but required for Spotify integration and higher rate limits.
-
-### authentication endpoints
-
-#### `GET /login`
-shows the login page with OAuth options
-
-#### `GET /login/google`
-initiates Google OAuth flow
-
-#### `GET /auth/google`
-handles Google OAuth callback
-
-#### `GET /login/github`  
-initiates GitHub OAuth flow
-
-#### `GET /auth/github`
-handles GitHub OAuth callback
-
-#### `GET /logout`
-logs out the current user
-
 ## core API endpoints
 
 ### query processing
@@ -291,6 +268,43 @@ shows integrations management page (requires login)
 #### `GET /login`
 shows login page with OAuth options
 
+## Authentication
+neubot supports OAuth2 authentication with Google and GitHub. Authentication is optional for basic functionality but required for Spotify integration and higher rate limits.
+
+To make authenticated requests to the API, you need to include an `Authorization` header with your API token. The token should be included as a `Bearer` token.
+
+**Header format:**
+```
+Authorization: Bearer [YOUR_TOKEN]
+```
+
+Replace `[YOUR_TOKEN]` with the token you received after a successful login.
+
+**Example using `curl`:**
+```bash
+curl -X GET https://neubot.joshatticus.site/api/limits \
+     -H "Authorization: Bearer [YOUR_TOKEN]"
+```
+
+### App Authentication
+
+To authenticate users from your application, you can redirect them to the neubot login page with a special `callbackURL`. This URL must contain a parameter with the value `[TOKEN]`.
+
+After the user successfully authenticates, they will be redirected back to this URL, with `[TOKEN]` replaced by their API token.
+
+**Login URL format:**
+
+`https://neubot.joshatticus.site/login/app?callbackURL=[YOUR_CALLBACK_URL]`
+
+**Example `callbackURL`:**
+
+`https://yourapp.com/auth/neubot?token=[TOKEN]`
+
+**Example login URL:**
+
+`https://neubot.joshatticus.site/login/app?callbackURL=https://yourapp.com/auth/neubot?token=%5BTOKEN%5D`
+
+Note that the `callbackURL` must be URL encoded.
 
 ## semantic parsing features
 

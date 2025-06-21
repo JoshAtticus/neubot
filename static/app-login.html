@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - neubot</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script defer data-domain="neubot.joshatticus.site"
+        src="https://plausible.joshatticus.site/js/script.file-downloads.outbound-links.js"></script>
+</head>
+
+<body>
+    <div class="app-login-wrapper">
+        <div class="app-login-container">
+            <div class="info-panel">
+                <h1 style="font-family: 'Bernoru UltraExpanded';">neubot</h1>
+                <p>Sign in to connect your neubot account to <strong>{{ app_name }}</strong></p>
+
+                <div class="disclaimer">
+                    <p><strong>Warning:</strong> This application is not verified by neubot. Only proceed if you trust the
+                        developer.</p>
+                    <p>By signing in, you allow <strong>{{ app_name }}</strong> to:</p>
+                    <ul>
+                        <li>Access your basic user information (name, email, profile picture).</li>
+                        <li>Perform actions on your behalf, such as send messages to neubot</li>
+                    </ul>
+                </div>
+
+                <a href="/" class="back-link">← Back to neubot</a>
+            </div>
+            <div class="login-panel">
+                <div class="oauth-buttons">
+                    <a href="/login/app/google" class="oauth-button google-button">
+                        <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/google/google-original.svg"
+                            alt="Google logo">
+                        Continue with Google
+                    </a>
+                    <a href="/login/app/github" class="oauth-button github-button">
+                        <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/github/github-original.svg"
+                            alt="GitHub logo">
+                        Continue with GitHub
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const urlParams = new URLSearchParams(window.location.search);
+            const callbackURLString = urlParams.get('callbackURL');
+            const loginPanel = document.querySelector('.login-panel');
+
+            let isValid = false;
+            if (callbackURLString) {
+                try {
+                    const callbackURL = new URL(callbackURLString);
+                    let hasTokenPlaceholder = false;
+                    for (const value of callbackURL.searchParams.values()) {
+                        if (value === '[TOKEN]') {
+                            hasTokenPlaceholder = true;
+                            break;
+                        }
+                    }
+                    if (hasTokenPlaceholder) {
+                        isValid = true;
+                    }
+                } catch (e) {
+                    // Invalid URL format
+                    isValid = false;
+                }
+            }
+
+            if (!isValid) {
+                if (loginPanel) {
+                    loginPanel.innerHTML = '<p class="error-message"><strong>Error:</strong> Invalid callback URL. The `callbackURL` parameter must be a valid URL and contain a query parameter with the value `[TOKEN]` for token substitution.</p>';
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>

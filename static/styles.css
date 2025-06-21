@@ -969,6 +969,45 @@ input:focus + .toggle-slider {
     line-height: 1.5;
 }
 
+.app-login-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+.app-login-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    max-width: 900px;
+    width: 100%;
+    margin: 20px;
+    background-color: #2a2a2a;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+}
+
+.info-panel {
+    padding: 40px;
+    border-right: 1px solid #333;
+}
+
+.login-panel {
+    padding: 40px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.login-panel .error-message {
+    background-color: #3e2c2c;
+    color: #ffcccc;
+    border: 1px solid #e74c3c;
+    padding: 20px;
+    border-radius: 8px;
+}
+
 @media (max-width: 768px) {
     h1 {
         font-size: 36px;
