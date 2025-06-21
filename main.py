@@ -1722,14 +1722,14 @@ def login_app_github():
     redirect_uri = url_for('auth_app_github_callback', _external=True)
     return oauth.github.authorize_redirect(redirect_uri, state=state)
 
-@app.route('/login/app/joshid')
-def login_app_joshid():
+@app.route('/login/app/JoshAtticusID')
+def login_app_JoshAtticusID():
     """Login with JoshAtticusID OAuth for app"""
     state = session.get('app_oauth_state')
     if not state:
         return "Invalid state, please start the login process again.", 400
 
-    redirect_uri = url_for('auth_app_joshid_callback', _external=True)
+    redirect_uri = url_for('auth_app_JoshAtticusID_callback', _external=True)
     return oauth.JoshAtticusID.authorize_redirect(redirect_uri, state=state)
 
 @app.route('/auth/app/google/callback')
@@ -1812,8 +1812,8 @@ def auth_app_github_callback():
     app_token = generate_app_token(user_id)
     return redirect(callback_url.replace('[TOKEN]', app_token))
 
-@app.route('/auth/app/joshid/callback')
-def auth_app_joshid_callback():
+@app.route('/auth/app/JoshAtticusID/callback')
+def auth_app_JoshAtticusID_callback():
     """Handle JoshAtticusID OAuth callback for app"""
     state = session.pop('app_oauth_state', None)
     callback_state = request.args.get('state')
@@ -1835,7 +1835,7 @@ def auth_app_joshid_callback():
     resp = oauth.JoshAtticusID.get('oauth/userinfo')
     user_info = resp.json()
     # NOTE: Assumes the userinfo response has a 'sub' field for the user ID.
-    user_id = f"joshid_{user_info['sub']}"
+    user_id = f"JoshAtticusID_{user_info['sub']}"
 
     with get_db_connection() as conn:
         cursor = conn.cursor()
@@ -1843,7 +1843,7 @@ def auth_app_joshid_callback():
         if not cursor.fetchone():
             cursor.execute(
                 "INSERT INTO users (id, name, email, provider, profile_pic) VALUES (?, ?, ?, ?, ?)",
-                (user_id, user_info.get('name'), user_info.get('email'), 'joshid', user_info.get('profile_picture'))
+                (user_id, user_info.get('name'), user_info.get('email'), 'JoshAtticusID', user_info.get('profile_picture'))
             )
             conn.commit()
 
@@ -1871,13 +1871,13 @@ def login_google():
     redirect_uri = url_for('auth_google', _external=True)
     return oauth.google.authorize_redirect(redirect_uri, state=state)
 
-@app.route('/login/joshid')
-def login_joshid():
+@app.route('/login/JoshAtticusID')
+def login_JoshAtticusID():
     """Login with JoshAtticusID OAuth"""
     state = secrets.token_urlsafe(16)
     session['oauth_state'] = state
     
-    redirect_uri = url_for('auth_joshid', _external=True)
+    redirect_uri = url_for('auth_JoshAtticusID', _external=True)
     return oauth.JoshAtticusID.authorize_redirect(redirect_uri, state=state)
 
 @app.route('/auth/google')
@@ -1920,8 +1920,8 @@ def auth_google():
     
     return redirect('/')
 
-@app.route('/auth/joshid')
-def auth_joshid():
+@app.route('/auth/JoshAtticusID')
+def auth_JoshAtticusID():
     """Handle JoshAtticusID OAuth callback"""
     expected_state = session.pop('oauth_state', None)
     callback_state = request.args.get('state')
@@ -1935,7 +1935,7 @@ def auth_joshid():
     user_info = resp.json()
     
     # NOTE: Assumes the userinfo response has a 'sub' field for the user ID.
-    user_id = f"joshid_{user_info['sub']}"
+    user_id = f"JoshAtticusID_{user_info['sub']}"
     
     with get_db_connection() as conn:
         cursor = conn.cursor()
