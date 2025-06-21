@@ -1928,13 +1928,6 @@ def auth_joshid():
     
     if not expected_state or callback_state != expected_state:
         return f"Invalid authentication state. Please try again. State: {callback_state} Expected State: {expected_state}", 403
-        
-     # --- ADD THIS DEBUGGING BLOCK ---
-    print("\n--- Neubot: /auth/joshid callback about to fetch token ---")
-    print(f"Using client_id:     '{JOSHATTICUS_CLIENT_ID}'")
-    print(f"Using client_secret: '{JOSHATTICUS_CLIENT_SECRET}'")
-    print("----------------------------------------------------------\n")
-    # --- END DEBUGGING BLOCK ---
     
     token = oauth.joshid.authorize_access_token()
     
