@@ -1363,9 +1363,33 @@ class SemanticParser:
             return text_match.group(0)
         elif symbol_match:
             self._add_thought("Found symbol mathematical expression", symbol_match.group(0))
-            return symbol_match.group(0)
-        
+            return symbol_match.group(0)        
         self._add_thought("No mathematical expression found", None)
+        return None
+
+    def _extract_search_query(self, query: str) -> Optional[str]:
+        """Extract search terms from query by removing search indicators"""
+        self._add_thought("Looking for search terms in query", None)
+        
+        search_terms = query.lower()
+        
+        # Remove common search indicators
+        search_indicators = [
+            "search for", "search", "find", "look up", "show me", "get", 
+            "tell me about", "what is", "who is", "where is", "how is"
+        ]
+        
+        for indicator in search_indicators:
+            search_terms = search_terms.replace(indicator, "").strip()
+        
+        # Clean up extra whitespace
+        search_terms = " ".join(search_terms.split())
+        
+        if search_terms:
+            self._add_thought("Extracted search terms", search_terms)
+            return search_terms
+        
+        self._add_thought("No search terms found after removing indicators", None)
         return None
 
 class SpotifyService:
@@ -2084,6 +2108,31 @@ def serve_static(path):
         return send_from_directory('static', 'index.html')
     return send_from_directory('static', path)
 
+def _extract_search_query(self, query: str) -> Optional[str]:
+        """Extract search terms from query by removing search indicators"""
+        self._add_thought("Looking for search terms in query", None)
+        
+        search_terms = query.lower()
+        
+        # Remove common search indicators
+        search_indicators = [
+            "search for", "search", "find", "look up", "show me", "get", 
+            "tell me about", "what is", "who is", "where is", "how is"
+        ]
+        
+        for indicator in search_indicators:
+            search_terms = search_terms.replace(indicator, "").strip()
+        
+        # Clean up extra whitespace
+        search_terms = " ".join(search_terms.split())
+        
+        if search_terms:
+            self._add_thought("Extracted search terms", search_terms)
+            return search_terms
+        
+        self._add_thought("No search terms found after removing indicators", None)
+        return None
+    
 def _extract_search_query(self, query: str) -> Optional[str]:
         """Extract search terms from query by removing search indicators"""
         self._add_thought("Looking for search terms in query", None)
