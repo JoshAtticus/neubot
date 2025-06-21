@@ -1927,7 +1927,7 @@ def auth_joshid():
     callback_state = request.args.get('state')
     
     if not expected_state or callback_state != expected_state:
-        return f"Invalid authentication state. Please try again. Error: {callback_state}", 403
+        return f"Invalid authentication state. Please try again. State: {callback_state} Expected State: {expected_state}", 403
         
     token = oauth.joshid.authorize_access_token()
     
