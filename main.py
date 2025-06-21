@@ -1730,7 +1730,7 @@ def login_app_joshid():
         return "Invalid state, please start the login process again.", 400
 
     redirect_uri = url_for('auth_app_joshid_callback', _external=True)
-    return oauth.joshid.authorize_redirect(redirect_uri, state=state)
+    return oauth.JoshAtticusID.authorize_redirect(redirect_uri, state=state)
 
 @app.route('/auth/app/google/callback')
 def auth_app_google_callback():
@@ -1831,8 +1831,8 @@ def auth_app_joshid_callback():
         cursor.execute("DELETE FROM app_auth_requests WHERE state = ?", (state,))
         conn.commit()
 
-    token = oauth.joshid.authorize_access_token()
-    resp = oauth.joshid.get('oauth/userinfo')
+    token = oauth.JoshAtticusID.authorize_access_token()
+    resp = oauth.JoshAtticusID.get('oauth/userinfo')
     user_info = resp.json()
     # NOTE: Assumes the userinfo response has a 'sub' field for the user ID.
     user_id = f"joshid_{user_info['sub']}"
@@ -1878,7 +1878,7 @@ def login_joshid():
     session['oauth_state'] = state
     
     redirect_uri = url_for('auth_joshid', _external=True)
-    return oauth.joshid.authorize_redirect(redirect_uri, state=state)
+    return oauth.JoshAtticusID.authorize_redirect(redirect_uri, state=state)
 
 @app.route('/auth/google')
 def auth_google():
@@ -1929,9 +1929,9 @@ def auth_joshid():
     if not expected_state or callback_state != expected_state:
         return f"Invalid authentication state. Please try again. State: {callback_state} Expected State: {expected_state}", 403
     
-    token = oauth.joshid.authorize_access_token()
+    token = oauth.JoshAtticusID.authorize_access_token()
     
-    resp = oauth.joshid.get('oauth/userinfo')
+    resp = oauth.JoshAtticusID.get('oauth/userinfo')
     user_info = resp.json()
     
     # NOTE: Assumes the userinfo response has a 'sub' field for the user ID.
