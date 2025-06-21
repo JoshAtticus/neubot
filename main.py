@@ -2271,7 +2271,4 @@ def _extract_search_query(self, query: str) -> Optional[str]:
     
 if __name__ == '__main__':
     print("\033[91mYOU ARE RUNNING THE SERVER IN DEBUG MODE! DO NOT USE THIS IN PRODUCTION!\033[0m")
-    print("Environment variables:")
-    for key, value in os.environ.items():
-        print(f"{key}: {value}")
     app.run(debug=True, host='0.0.0.0', port=5300)
