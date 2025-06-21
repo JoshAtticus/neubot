@@ -2,7 +2,6 @@ import re
 import json
 import requests
 import sqlite3
-import sys
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Any, Tuple, Set
 from flask import Flask, request, jsonify, send_from_directory, redirect, url_for, session, render_template
@@ -30,7 +29,6 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-import jwt
 
 load_dotenv()
 
@@ -811,7 +809,7 @@ class SemanticParser:
             return "I need a location to check the weather. Please specify a city or place."
         
         ip = get_client_ip()
-        user_id = current_user.get_id() if current_user.is_authenticated else None
+        user_id = get_request_user_id()
         allowed, remaining = rate_limiter.check_rate_limit(ip, "weather", user_id)
         if not allowed:
             return f"Sorry, I can't get weather information because you've exceeded your monthly limit."
@@ -1063,7 +1061,7 @@ class SemanticParser:
             return "What would you like me to search for?"
         
         ip = get_client_ip()
-        user_id = current_user.get_id() if current_user.is_authenticated else None
+        user_id = get_request_user_id()
         allowed, remaining = rate_limiter.check_rate_limit(ip, "search", user_id)
         if not allowed:
             return json.dumps({
@@ -1536,15 +1534,33 @@ def migrate_existing_tokens():
         else:
             print("No tokens needed encryption")
 
-def generate_token(user_id):
-    return jwt.encode(
-        {
-            'user_id': user_id,
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(days=28)
-        },
-        app.config['SECRET_KEY'],
-        algorithm='HS256'
-    )
+
+def get_user_id_from_token(auth_header: Optional[str]) -> Optional[str]:
+    if not auth_header:
+        return None
+    
+    parts = auth_header.split()
+    
+    if parts[0].lower() != 'bearer' or len(parts) != 2:
+        return None
+        
+    token = parts[1]
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT user_id FROM app_tokens WHERE token = ?", (token,))
+        result = cursor.fetchone()
+        if result:
+            return result['user_id']
+    return None
+
+def get_request_user_id():
+    """Gets user ID from session or Authorization header token."""
+    user_id = current_user.get_id() if current_user.is_authenticated else None
+    if not user_id:
+        auth_header = request.headers.get('Authorization')
+        user_id = get_user_id_from_token(auth_header)
+    return user_id
+
 
 @app.route('/api/query', methods=['POST'])
 def process_query():
@@ -1556,7 +1572,7 @@ def process_query():
         return jsonify({"error": "No query provided"}), 400
     
     ip = get_client_ip()
-    user_id = current_user.get_id() if current_user.is_authenticated else None
+    user_id = get_request_user_id()
     allowed, remaining = rate_limiter.check_rate_limit(ip, "total", user_id)
     if not allowed:
         return jsonify({
@@ -1584,7 +1600,7 @@ def process_query():
 def get_rate_limits():
     """Get current rate limit status for requesting IP"""
     ip = get_client_ip()
-    user_id = current_user.get_id() if current_user.is_authenticated else None
+    user_id = get_request_user_id()
     limits = rate_limiter.get_limits(ip, user_id)
     return jsonify(limits)
 
@@ -1603,6 +1619,20 @@ def get_user_info():
             }
         })
     else:
+        user_id = get_request_user_id()
+        if user_id:
+            user = User.get(user_id)
+            if user:
+                return jsonify({
+                    "authenticated": True,
+                    "user": {
+                        "id": user.id,
+                        "name": user.name,
+                        "email": user.email,
+                        "provider": user.provider,
+                        "profile_pic": user.profile_pic
+                    }
+                })
         return jsonify({
             "authenticated": False
         })
@@ -1951,6 +1981,7 @@ def spotify_integration_status():
                 return jsonify({
                     "linked": True,
                     "active": False,
+
                     "message": "Spotify connected, but no active playback detected"
                 })
         except:
@@ -2079,25 +2110,5 @@ def _extract_search_query(self, query: str) -> Optional[str]:
         return None
     
 if __name__ == '__main__':
-    # Check if running in a systemd environment (production)
-    in_systemd = False
-    try:
-        # Check for INVOCATION_ID environment variable which is set by systemd
-        if os.environ.get('INVOCATION_ID') or os.environ.get('JOURNAL_STREAM'):
-            in_systemd = True
-        # Another method: check if parent process is systemd
-        elif os.path.exists('/proc/1/comm') and 'systemd' in open('/proc/1/comm').read():
-            in_systemd = True
-    except Exception:
-        pass
-    
-    if in_systemd:
-        print("\033[91mERROR: This script should not be run directly in a production/systemd environment!\033[0m")
-        print("Please use a proper WSGI server like gunicorn or uwsgi for production deployment.")
-        sys.exit(1)
-    
-    # Initialize database encryption for tokens if needed
-    migrate_existing_tokens()
-    
     print("\033[91mYOU ARE RUNNING THE SERVER IN DEBUG MODE! DO NOT USE THIS IN PRODUCTION!\033[0m")
     app.run(debug=True, host='0.0.0.0', port=5300)
