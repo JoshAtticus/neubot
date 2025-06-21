@@ -1946,7 +1946,7 @@ def auth_joshid():
         if not existing_user:
             cursor.execute(
                 "INSERT INTO users (id, name, email, provider, profile_pic) VALUES (?, ?, ?, ?, ?)",
-                (user_id, user_info.get('name'), user_info.get('email'), 'joshid', user_info.get('profile_picture'))
+                (user_id, user_info.get('name'), user_info.get('email'), 'JoshAtticusID', user_info.get('profile_picture'))
             )
             conn.commit()
     
