@@ -1954,7 +1954,7 @@ def auth_joshid():
         id=user_id,
         name=user_info.get('name'),
         email=user_info.get('email'),
-        provider='joshid',
+        provider='JoshAtticusID',
         profile_pic=user_info.get('profile_picture')
     )
     login_user(user)
