@@ -1507,7 +1507,7 @@ oauth.register(
 )
 
 oauth.register(
-    name='joshid',
+    name='JoshAtticusID',
     client_id=JOSHATTICUS_CLIENT_ID,
     client_secret=JOSHATTICUS_CLIENT_SECRET,
     authorize_url='https://id.joshattic.us/oauth/authorize',
