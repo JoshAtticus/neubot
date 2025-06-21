@@ -909,7 +909,7 @@ class SemanticParser:
         
         self._add_thought("Checking for greetings", None)
         for greeting in self.greeting_phrases:
-            if greeting in query_lower or query_lower.startswith(greeting):
+            if re.search(r'\b' + re.escape(greeting) + r'\b', query_lower) or query_lower.startswith(greeting):
                 contains_greeting = True
                 self._add_thought("Found greeting in query", greeting)
                 if len(query_lower.split()) <= 2 or query_lower in self.greeting_phrases:

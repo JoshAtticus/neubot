@@ -363,7 +363,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 plainText = null;
             }
         } catch (e) {
-            const jsonRegex = /\{"type":\s*"(spotify_track|search_results)".*?\}/gs;
+            const jsonRegex = /\{"type":\s*"(spotify_track|search_results)".*\}/gs;
             const match = text.match(jsonRegex);
             
             if (match) {
