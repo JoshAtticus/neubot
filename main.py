@@ -36,8 +36,10 @@ OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "")
 BRAVE_SEARCH_TOKEN = os.getenv("BRAVE_SEARCH_TOKEN", "")
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
-GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "")
-GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "")
+GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
+GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
+JOSHATTICUS_CLIENT_ID = os.getenv("JOSHATTICUS_CLIENT_ID")
+JOSHATTICUS_CLIENT_SECRET = os.getenv("JOSHATTICUS_CLIENT_SECRET")
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID", "")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET", "")
 SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://localhost:5300/auth/spotify/callback")
@@ -1504,6 +1506,17 @@ oauth.register(
     client_kwargs={'scope': 'user:email'},
 )
 
+oauth.register(
+    name='joshid',
+    client_id=JOSHATTICUS_CLIENT_ID,
+    client_secret=JOSHATTICUS_CLIENT_SECRET,
+    authorize_url='https://id.joshattic.us/oauth/authorize',
+    access_token_url='https://id.joshattic.us/oauth/token',
+    api_base_url='https://id.joshattic.us/',
+    userinfo_endpoint='oauth/userinfo',
+    client_kwargs={'scope': 'name email profile_picture'},
+)
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.get(user_id)
@@ -1699,6 +1712,26 @@ def login_app_google():
     redirect_uri = url_for('auth_app_google_callback', _external=True)
     return oauth.google.authorize_redirect(redirect_uri, state=state)
 
+@app.route('/login/app/github')
+def login_app_github():
+    """Login with GitHub OAuth for app"""
+    state = session.get('app_oauth_state')
+    if not state:
+        return "Invalid state, please start the login process again.", 400
+
+    redirect_uri = url_for('auth_app_github_callback', _external=True)
+    return oauth.github.authorize_redirect(redirect_uri, state=state)
+
+@app.route('/login/app/joshid')
+def login_app_joshid():
+    """Login with JoshAtticusID OAuth for app"""
+    state = session.get('app_oauth_state')
+    if not state:
+        return "Invalid state, please start the login process again.", 400
+
+    redirect_uri = url_for('auth_app_joshid_callback', _external=True)
+    return oauth.joshid.authorize_redirect(redirect_uri, state=state)
+
 @app.route('/auth/app/google/callback')
 def auth_app_google_callback():
     """Handle Google OAuth callback for app"""
@@ -1735,16 +1768,6 @@ def auth_app_google_callback():
 
     app_token = generate_app_token(user_id)
     return redirect(callback_url.replace('[TOKEN]', app_token))
-
-@app.route('/login/app/github')
-def login_app_github():
-    """Login with GitHub OAuth for app"""
-    state = session.get('app_oauth_state')
-    if not state:
-        return "Invalid state, please start the login process again.", 400
-
-    redirect_uri = url_for('auth_app_github_callback', _external=True)
-    return oauth.github.authorize_redirect(redirect_uri, state=state)
 
 @app.route('/auth/app/github/callback')
 def auth_app_github_callback():
@@ -1789,6 +1812,44 @@ def auth_app_github_callback():
     app_token = generate_app_token(user_id)
     return redirect(callback_url.replace('[TOKEN]', app_token))
 
+@app.route('/auth/app/joshid/callback')
+def auth_app_joshid_callback():
+    """Handle JoshAtticusID OAuth callback for app"""
+    state = session.pop('app_oauth_state', None)
+    callback_state = request.args.get('state')
+
+    if not state or state != callback_state:
+        return "Invalid authentication state. Please try again.", 403
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT callback_url FROM app_auth_requests WHERE state = ?", (state,))
+        auth_request = cursor.fetchone()
+        if not auth_request:
+            return "Invalid authentication request.", 403
+        callback_url = auth_request['callback_url']
+        cursor.execute("DELETE FROM app_auth_requests WHERE state = ?", (state,))
+        conn.commit()
+
+    token = oauth.joshid.authorize_access_token()
+    resp = oauth.joshid.get('oauth/userinfo')
+    user_info = resp.json()
+    # NOTE: Assumes the userinfo response has a 'sub' field for the user ID.
+    user_id = f"joshid_{user_info['sub']}"
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        if not cursor.fetchone():
+            cursor.execute(
+                "INSERT INTO users (id, name, email, provider, profile_pic) VALUES (?, ?, ?, ?, ?)",
+                (user_id, user_info.get('name'), user_info.get('email'), 'joshid', user_info.get('profile_picture'))
+            )
+            conn.commit()
+
+    app_token = generate_app_token(user_id)
+    return redirect(callback_url.replace('[TOKEN]', app_token))
+
 def generate_app_token(user_id):
     """Generate and store a new app token for a user"""
     token = secrets.token_urlsafe(32)
@@ -1810,6 +1871,15 @@ def login_google():
     redirect_uri = url_for('auth_google', _external=True)
     return oauth.google.authorize_redirect(redirect_uri, state=state)
 
+@app.route('/login/joshid')
+def login_joshid():
+    """Login with JoshAtticusID OAuth"""
+    state = secrets.token_urlsafe(16)
+    session['oauth_state'] = state
+    
+    redirect_uri = url_for('auth_joshid', _external=True)
+    return oauth.joshid.authorize_redirect(redirect_uri, state=state)
+
 @app.route('/auth/google')
 def auth_google():
     """Handle Google OAuth callback"""
@@ -1825,7 +1895,7 @@ def auth_google():
     user_info = resp.json()
     
     user_id = f"google_{user_info['sub']}"
-    
+
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
@@ -1845,6 +1915,47 @@ def auth_google():
         email=user_info.get('email'),
         provider='google',
         profile_pic=user_info.get('picture')
+    )
+    login_user(user)
+    
+    return redirect('/')
+
+@app.route('/auth/joshid')
+def auth_joshid():
+    """Handle JoshAtticusID OAuth callback"""
+    expected_state = session.pop('oauth_state', None)
+    callback_state = request.args.get('state')
+    
+    if not expected_state or callback_state != expected_state:
+        return "Invalid authentication state. Please try again.", 403
+        
+    token = oauth.joshid.authorize_access_token()
+    
+    resp = oauth.joshid.get('oauth/userinfo')
+    user_info = resp.json()
+    
+    # NOTE: Assumes the userinfo response has a 'sub' field for the user ID.
+    user_id = f"joshid_{user_info['sub']}"
+    
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        existing_user = cursor.fetchone()
+        
+        if not existing_user:
+            cursor.execute(
+                "INSERT INTO users (id, name, email, provider, profile_pic) VALUES (?, ?, ?, ?, ?)",
+                (user_id, user_info.get('name'), user_info.get('email'), 'joshid', user_info.get('profile_picture'))
+            )
+            conn.commit()
+    
+    user = User(
+        id=user_id,
+        name=user_info.get('name'),
+        email=user_info.get('email'),
+        provider='joshid',
+        profile_pic=user_info.get('profile_picture')
     )
     login_user(user)
     

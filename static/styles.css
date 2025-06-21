@@ -1323,6 +1323,11 @@ input:focus + .toggle-slider {
     margin-right: 10px;
 }
 
+.joshid-button {
+    background: linear-gradient(135deg, #0f1f3d, #1e3a6e, #0f1f3d);
+    color: #ffffff;
+}
+
 .google-button {
     background-color: #fff;
     color: #444;
