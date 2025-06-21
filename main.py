@@ -2,6 +2,7 @@ import re
 import json
 import requests
 import sqlite3
+import sys
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Any, Tuple, Set
 from flask import Flask, request, jsonify, send_from_directory, redirect, url_for, session, render_template
@@ -29,6 +30,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+import jwt
 
 load_dotenv()
 
@@ -1534,6 +1536,16 @@ def migrate_existing_tokens():
         else:
             print("No tokens needed encryption")
 
+def generate_token(user_id):
+    return jwt.encode(
+        {
+            'user_id': user_id,
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(days=28)
+        },
+        app.config['SECRET_KEY'],
+        algorithm='HS256'
+    )
+
 @app.route('/api/query', methods=['POST'])
 def process_query():
     data = request.json
@@ -2067,5 +2079,25 @@ def _extract_search_query(self, query: str) -> Optional[str]:
         return None
     
 if __name__ == '__main__':
+    # Check if running in a systemd environment (production)
+    in_systemd = False
+    try:
+        # Check for INVOCATION_ID environment variable which is set by systemd
+        if os.environ.get('INVOCATION_ID') or os.environ.get('JOURNAL_STREAM'):
+            in_systemd = True
+        # Another method: check if parent process is systemd
+        elif os.path.exists('/proc/1/comm') and 'systemd' in open('/proc/1/comm').read():
+            in_systemd = True
+    except Exception:
+        pass
+    
+    if in_systemd:
+        print("\033[91mERROR: This script should not be run directly in a production/systemd environment!\033[0m")
+        print("Please use a proper WSGI server like gunicorn or uwsgi for production deployment.")
+        sys.exit(1)
+    
+    # Initialize database encryption for tokens if needed
+    migrate_existing_tokens()
+    
     print("\033[91mYOU ARE RUNNING THE SERVER IN DEBUG MODE! DO NOT USE THIS IN PRODUCTION!\033[0m")
     app.run(debug=True, host='0.0.0.0', port=5300)
