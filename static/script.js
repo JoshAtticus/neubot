@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     const bannerDismissed = localStorage.getItem('neubot_banner_dismissed') === 'true';
     const welcomeModalSeen = localStorage.getItem('neubot_welcome_seen') === 'true';
-    const whatsNewModalSeen = localStorage.getItem('neubot_whats_new_20250422_seen') === 'true';
+    const whatsNewModalSeen = localStorage.getItem('neubot_whats_new_20250622_seen') === 'true';
     
     if (!welcomeModalSeen) {
         welcomeModal.style.display = 'block';
@@ -56,7 +56,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setTimeout(() => {
                 whatsNewModal.style.display = 'none';
             }, 300);
-            localStorage.setItem('neubot_whats_new_20250422_seen', 'true');
+            localStorage.setItem('neubot_whats_new_20250622_seen', 'true');
         });
     }
     
@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setTimeout(() => {
                 whatsNewModal.style.display = 'none';
             }, 300);
-            localStorage.setItem('neubot_whats_new_20250422_seen', 'true');
+            localStorage.setItem('neubot_whats_new_20250622_seen', 'true');
             
             setTimeout(() => {
                 queryInput.focus();
@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setTimeout(() => {
                 whatsNewModal.style.display = 'none';
             }, 300);
-            localStorage.setItem('neubot_whats_new_20250422_seen', 'true');
+            localStorage.setItem('neubot_whats_new_20250622_seen', 'true');
         }
     });
     
@@ -115,7 +115,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 setTimeout(() => {
                     whatsNewModal.style.display = 'none';
                 }, 300);
-                localStorage.setItem('neubot_whats_new_20250422_seen', 'true');
+                localStorage.setItem('neubot_whats_new_20250622_seen', 'true');
             }
             
             setTimeout(() => {
