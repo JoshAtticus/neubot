@@ -1514,7 +1514,7 @@ oauth.register(
     access_token_url='https://id.joshattic.us/oauth/token',
     api_base_url='https://id.joshattic.us/',
     userinfo_endpoint='oauth/userinfo',
-    client_kwargs={'scope': 'name email profile_picture'},
+    client_kwargs={'scope': 'name email profile_picture', 'token_type': 'bearer'},
 )
 
 @login_manager.user_loader
@@ -1832,8 +1832,9 @@ def auth_app_JoshAtticusID_callback():
         conn.commit()
 
     token = oauth.JoshAtticusID.authorize_access_token()
-    resp = oauth.JoshAtticusID.get('oauth/userinfo')
+    resp = oauth.JoshAtticusID.get('oauth/userinfo', token=token)
     user_info = resp.json()
+    
     # NOTE: Assumes the userinfo response has a 'sub' field for the user ID.
     user_id = f"JoshAtticusID_{user_info['sub']}"
 
@@ -1931,7 +1932,7 @@ def auth_JoshAtticusID():
     
     token = oauth.JoshAtticusID.authorize_access_token()
     
-    resp = oauth.JoshAtticusID.get('oauth/userinfo')
+    resp = oauth.JoshAtticusID.get('oauth/userinfo', token=token)
     user_info = resp.json()
     
     # NOTE: Assumes the userinfo response has a 'sub' field for the user ID.
