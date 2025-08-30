@@ -359,7 +359,70 @@ document.addEventListener('DOMContentLoaded', function() {
                 plainText = null;
             } else if (data.type === 'ha_result') {
                 plainText = data.summary || '';
-                const widget = buildHaWidget(data);
+                    const widget = buildHaWidget(data);
+                    // HA widget builder (compact card with icons & indicators)
+                    function buildHaWidget(data){
+                        const domain = data.domain || 'device';
+                        const devs = data.devices || [];
+                        const action = data.action || '';
+                        const applied = data.applied || {};
+                        const iconMap = { light:'💡', switch:'⏻', fan:'🌀', scene:'🎬', script:'▶', group:'📦' };
+                        const ico = iconMap[domain] || '⌂';
+                        const wrap = document.createElement('div');
+                        wrap.className = 'ha-block';
+                        // Header
+                        const header = document.createElement('div');
+                        header.className = 'ha-block-header';
+                        let stateWord = '';
+                        if(action==='turn_on') stateWord = 'on';
+                        else if(action==='turn_off') stateWord = 'off';
+                        let appliedBits = [];
+                        if(applied.color_name){
+                            appliedBits.push(applied.color_name);
+                        }
+                        if(applied.brightness_pct){
+                            appliedBits.push(applied.brightness_pct + '%');
+                        }
+                        const appliedText = appliedBits.length ? ' • ' + appliedBits.join(' @ ').replace(' @ %','%') : '';
+                        header.innerHTML = `<span class="ha-ico" aria-hidden="true">${ico}</span><span class="ha-h-text">${devs.length} ${domain}${devs.length===1?'':'s'} ${stateWord}${appliedText}</span>`;
+                        wrap.appendChild(header);
+                        // Device list
+                        const list = document.createElement('ul');
+                        list.className = 'ha-dev-list';
+                        if(!devs.length){
+                            const li = document.createElement('li');
+                            li.className='empty';
+                            li.textContent = 'No matching devices';
+                            list.appendChild(li);
+                        } else {
+                            devs.forEach(d=>{
+                                const li = document.createElement('li');
+                                const success = !!d.success;
+                                const isOn = action==='turn_on' || (action==='multi' && d.requested_action==='turn_on');
+                                const stateLabel = success ? (isOn ? 'on':'off') : 'error';
+                                const stateClass = success ? (isOn ? 'on':'off') : 'err';
+                                let extra = '';
+                                if(d.applied_color){
+                                    extra += `<span class="ha-mini-chip" style="--ha-chip-color:${d.applied_color}" title="${d.applied_color}"></span>`;
+                                }
+                                if(typeof d.applied_brightness_pct === 'number'){
+                                    extra += `<span class="ha-mini-br">${d.applied_brightness_pct}%</span>`;
+                                }
+                                li.innerHTML = `<span class="nm" title="${d.entity_id}">${d.name||d.entity_id}</span><span class="st ${stateClass}"><span class="dot"></span>${stateLabel}</span>${extra}`;
+                                list.appendChild(li);
+                            });
+                        }
+                        wrap.appendChild(list);
+                        // Color chip if color applied
+                        if(applied.color_name){
+                            const colorChip = document.createElement('span');
+                            colorChip.className='ha-color-chip';
+                            colorChip.style.setProperty('--ha-chip-color', applied.color_name);
+                            colorChip.title = applied.color_name + (applied.brightness_pct? ` @ ${applied.brightness_pct}%`:'');
+                            header.appendChild(colorChip);
+                        }
+                        return wrap;
+                    }
                 // append later after text
                 setTimeout(()=>{ messageContent.appendChild(widget); scrollToBottom(); },0);
             }
@@ -410,44 +473,24 @@ document.addEventListener('DOMContentLoaded', function() {
             messageContent.appendChild(searchResultsDiv);
         }
 
-                // HA widget builder
+                // HA widget builder (inline minimalist list)
                 function buildHaWidget(data){
-                        const wrap = document.createElement('div');
-                        wrap.className = 'ha-widget';
-                        const list = document.createElement('div');
-                        list.className = 'ha-device-list';
-                        (data.devices||[]).forEach(dev=>{
-                                const row = document.createElement('div');
-                                row.className='ha-device-row';
-                                row.innerHTML = `
-                                    <div class="ha-device-main">
-                                        <span class="ha-name">${dev.name||dev.entity_id}</span>
-                                        <span class="ha-status ${dev.success?'ok':'err'}">${dev.success? (data.action==='turn_on'?'on':'off') : 'error'}</span>
-                                    </div>
-                                `;
-                                list.appendChild(row);
-                        });
-                        wrap.appendChild(list);
-                        if(data.domain==='light'){
-                                const controls = document.createElement('div');
-                                controls.className='ha-inline-controls';
-                                controls.innerHTML = `
-                                    <label>Brightness <input type="range" min="1" max="100" value="${data.applied && data.applied.brightness_pct? data.applied.brightness_pct:100}" class="ha-brightness"/></label>
-                                    <input type="text" placeholder="color name" class="ha-color" value="${data.applied && data.applied.color_name? data.applied.color_name:''}" />
-                                    <button class="ha-apply">Apply</button>
-                                `;
-                                wrap.appendChild(controls);
-                                controls.querySelector('.ha-apply').addEventListener('click', ()=>{
-                                        const b = controls.querySelector('.ha-brightness').value;
-                                        const c = controls.querySelector('.ha-color').value.trim();
-                                        // Send a follow-up natural language command leveraging parser
-                                        let follow = 'set lights to ' + b + '%';
-                                        if(c) follow += ' ' + c;
-                                        queryInput.value = follow;
-                                        processQuery();
-                                });
-                        }
-                        return wrap;
+                    const wrap = document.createElement('div');
+                    wrap.className = 'ha-devices-inline';
+                    const ul = document.createElement('ul');
+                    ul.className = 'ha-device-lines';
+                    (data.devices||[]).forEach(dev=>{
+                        const li = document.createElement('li');
+                        li.innerHTML = `<span class="n">${dev.name||dev.entity_id}</span><span class="s ${dev.success?'ok':'err'}">${dev.success? (data.action==='turn_on'?'on':'off') : 'error'}</span>`;
+                        ul.appendChild(li);
+                    });
+                    if(!ul.children.length){
+                        const li = document.createElement('li');
+                        li.innerHTML = '<span class="n">No devices matched</span><span class="s err">—</span>';
+                        ul.appendChild(li);
+                    }
+                    wrap.appendChild(ul);
+                    return wrap;
                 }
         
     // Spotify track rendering removed (integration deprecated)

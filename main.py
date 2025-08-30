@@ -16,6 +16,7 @@ from collections import defaultdict
 import datetime as dt 
 from datetime import datetime, timedelta
 import time
+import random
 import uuid
 import secrets
 from urllib.parse import urlparse
@@ -40,13 +41,13 @@ SECRET_KEY = os.getenv("SECRET_KEY", secrets.token_hex(16))
 
 DEFAULT_TIMEZONE = "America/New_York"
 
-GUEST_WEATHER_RATE_LIMIT = 3  # requests per month for non-logged-in users
-GUEST_SEARCH_RATE_LIMIT = 5   # requests per month for non-logged-in users
-GUEST_TOTAL_QUERY_LIMIT = 50  # total requests per month for non-logged-in users
+GUEST_WEATHER_RATE_LIMIT = 5  # requests per month for non-logged-in users
+GUEST_SEARCH_RATE_LIMIT = 10   # requests per month for non-logged-in users
+GUEST_TOTAL_QUERY_LIMIT = 100  # total requests per month for non-logged-in users
 
-USER_WEATHER_RATE_LIMIT = 30  # requests per month for logged-in users
-USER_SEARCH_RATE_LIMIT = 50   # requests per month for logged-in users
-USER_TOTAL_QUERY_LIMIT = 500  # total requests per month for logged-in users
+USER_WEATHER_RATE_LIMIT = 50  # requests per month for logged-in users
+USER_SEARCH_RATE_LIMIT = 100   # requests per month for logged-in users
+USER_TOTAL_QUERY_LIMIT = 1000  # total requests per month for logged-in users
 
 
 DB_FILE = "neubot.db"
@@ -1247,7 +1248,6 @@ class SemanticParser:
         # Refresh token if expired
         now_ts = int(time.time())
         if expires_at and expires_at < now_ts - 30 and refresh_token:
-            self._add_thought("Access token expired, attempting refresh", expires_at)
             try:
                 token_resp = requests.post(
                     f"{base_url}/auth/token",
@@ -1265,10 +1265,8 @@ class SemanticParser:
                         c2 = conn.cursor()
                         c2.execute('UPDATE home_assistant_links SET access_token = ?, expires_at = ? WHERE user_id = ?', (encrypt_token(access_token), new_expires, current_user.id))
                         conn.commit()
-                else:
-                    self._add_thought("Refresh failed", token_resp.text[:120])
-            except Exception as e:
-                self._add_thought("Refresh exception", str(e))
+            except Exception:
+                pass  # silent fallback
 
         # Structured entities first
         action = entities.get('ha_action')
@@ -1314,21 +1312,165 @@ class SemanticParser:
         except Exception as e:
             return f"Error contacting Home Assistant: {e}"
 
-        # Target entity selection
+        # -------------------- Helpers --------------------
+        color_words_all = ["warm white","cool white","magenta","yellow","purple","orange","white","green","blue","pink","cyan","red"]
+
+        def detect_colors(text: str):
+            found = []
+            for cw in color_words_all:
+                if cw in text:
+                    found.append(cw)
+            # de-dupe keep order
+            seen = set(); ordered = []
+            for c in found:
+                if c not in seen:
+                    ordered.append(c); seen.add(c)
+            return ordered
+
+        def detect_brightness(text: str):
+            m_pct = re.search(r"(\d{1,3})%", text)
+            if m_pct:
+                pct = int(m_pct.group(1)); return max(1, min(100, pct))
+            if re.search(r"\bhalf\b", text): return 50
+            if re.search(r"\b(full|max(imum)?|bright(est)?)\b", text): return 100
+            if re.search(r"\b(dim|low)\b", text): return 25
+            if re.search(r"\bmedium\b", text): return 60
+            return None
+
+        # -------------- Multi-clause segmentation --------------
+        segmentation_trigger = False
+        if (' and ' in ql or ' then ' in ql) and domain == 'light':
+            group_tokens = {'desk','accent','bed','drawer','under','above'}
+            occurrences = sum(1 for t in group_tokens if t in ql)
+            color_occ = sum(1 for c in color_words_all if c in ql)
+            on_off_occ = len(re.findall(r"\b(turn on|turn off|switch on|switch off|set)\b", ql))
+            if occurrences >= 2 or color_occ >= 2 or on_off_occ >= 2:
+                segmentation_trigger = True
+
+        if segmentation_trigger:
+            raw_segments = re.split(r"\b(?:and then|then|and)\b", ql)
+            segments = [s.strip() for s in raw_segments if s.strip()]
+            ignore_tokens = {'the','a','my','to','please','all','every','set','make','turn','switch','and','then','at','on','off','lights','light','lamp','lamps','bulb','bulbs'}
+            action_regex_on = re.compile(r"\b(turn on|switch on|set .*? to|set .*? on|activate|enable)\b")
+            action_regex_off = re.compile(r"\b(turn off|switch off|deactivate|disable)\b")
+
+            # Pre-tokenize entity names
+            entity_name_tokens: Dict[str, Tuple[str, Set[str], str]] = {}
+            for st in states:
+                eid = st.get('entity_id','')
+                if not eid.startswith(domain + '.'):
+                    continue
+                fname = st.get('attributes',{}).get('friendly_name','')
+                toks = set(re.findall(r"[a-zA-Z0-9']+", fname.lower()))
+                entity_name_tokens[eid] = (fname, toks, st.get('state'))
+
+            clause_results = []
+            for seg in segments:
+                seg_l = seg.lower()
+                seg_action = None
+                if action_regex_off.search(seg_l):
+                    seg_action = 'turn_off'
+                elif action_regex_on.search(seg_l):
+                    seg_action = 'turn_on'
+                seg_colors = detect_colors(seg_l)
+                seg_color = seg_colors[0] if seg_colors else None
+                if seg_color and not seg_action:
+                    seg_action = 'turn_on'
+                seg_brightness = detect_brightness(seg_l)
+                raw_tokens = re.findall(r"[a-zA-Z0-9']+", seg_l)
+                device_tokens = [t for t in raw_tokens if t not in ignore_tokens and t not in {'to'} and all(cw.find(t) == -1 for cw in color_words_all)]
+                device_tokens = [t for t in device_tokens if not t.isdigit()]
+                device_tokens_set = set(device_tokens)
+                seg_entities = []
+                if device_tokens_set:
+                    for eid,(fname,toks,state_val) in entity_name_tokens.items():
+                        if toks & device_tokens_set:
+                            seg_entities.append((eid,fname,state_val))
+                if seg_entities and (seg_action or seg_color or seg_brightness):
+                    clause_results.append({
+                        'action': seg_action or ('turn_on' if (seg_color or seg_brightness) else action or 'turn_on'),
+                        'color': seg_color,
+                        'colors': seg_colors,
+                        'brightness': seg_brightness,
+                        'entities': seg_entities
+                    })
+
+            if len(clause_results) > 1:
+                results = []
+                summary_clauses = []
+                for c in clause_results:
+                    color_cycle: List[str] = []
+                    if c['colors'] and len(c['colors']) > 1 and c['action'] == 'turn_on' and domain == 'light':
+                        while len(color_cycle) < len(c['entities']):
+                            color_cycle.extend(c['colors'])
+                        color_cycle = color_cycle[:len(c['entities'])]
+                        random.shuffle(color_cycle)
+                    color_idx = 0
+                    for eid,fname,state_val in c['entities']:
+                        svc_data = {'entity_id': eid}
+                        assigned_color = None
+                        if domain == 'light' and c['action'] == 'turn_on':
+                            if c['brightness'] is not None:
+                                svc_data['brightness_pct'] = c['brightness']
+                            if color_cycle:
+                                assigned_color = color_cycle[color_idx]; color_idx += 1
+                                svc_data['color_name'] = assigned_color
+                            elif c['color']:
+                                assigned_color = c['color']; svc_data['color_name'] = assigned_color
+                        try:
+                            svc = requests.post(
+                                f"{base_url}/api/services/{domain}/{c['action']}",
+                                headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+                                json=svc_data,
+                                timeout=5
+                            )
+                            success = svc.status_code in (200,201)
+                        except Exception as e:
+                            success = False
+                            svc = type('obj', (), {'status_code': 0})()  # simple placeholder
+                            assigned_error = str(e)
+                        results.append({
+                            'entity_id': eid,
+                            'name': fname,
+                            'requested_action': c['action'],
+                            'success': success,
+                            'code': getattr(svc, 'status_code', 0),
+                            'state_before': state_val,
+                            'applied_color': assigned_color,
+                            'applied_brightness_pct': c['brightness']
+                        })
+                    names = [e[1] for e in c['entities']]
+                    if names:
+                        act_word = 'on' if c['action']=='turn_on' else 'off'
+                        clause_text = f"{', '.join(names)} {act_word}"
+                        if c['color']:
+                            clause_text += f" ({c['color']})"
+                        summary_clauses.append(clause_text)
+                summary_text = '; '.join(summary_clauses) + '.' if summary_clauses else 'Action attempted.'
+                return json.dumps({
+                    'type':'ha_result',
+                    'summary': summary_text,
+                    'action': 'multi',
+                    'domain': domain,
+                    'devices': results,
+                    'applied': {}
+                })
+            # else fall through to single-clause path using original query elements
+
+        # -------------- Single clause path --------------
+        # Identify probable entities
         target_entity = None
         friendly = None
-        phrase_tokens = []
+        phrase_tokens: List[str] = []
         if device_phrase:
-            phrase_tokens = [t for t in re.findall(r"\w+", device_phrase.lower()) if t not in ('the', 'a', 'my')]
+            phrase_tokens = [t for t in re.findall(r"\w+", device_phrase.lower()) if t not in ('the','a','my')]
         best_score = 0.0
         for st in states:
-            eid = st.get('entity_id', '')
-            if not eid.startswith(domain + "."):
+            eid = st.get('entity_id','')
+            if not eid.startswith(domain + '.'):
                 continue
-            attrs = st.get('attributes', {})
-            fname = attrs.get('friendly_name', '')
+            fname = st.get('attributes',{}).get('friendly_name','')
             fname_l = fname.lower()
-            score = 0.0
             if phrase_tokens:
                 matches = sum(1 for t in phrase_tokens if t in fname_l)
                 score = matches / max(1, len(phrase_tokens))
@@ -1337,72 +1479,64 @@ class SemanticParser:
             else:
                 score = 0.1
             if score > best_score and score >= 0.3:
-                best_score = score
-                target_entity = eid
-                friendly = fname
+                best_score = score; target_entity = eid; friendly = fname
             if score >= 0.99:
                 break
-        # Multi-entity & color/brightness enhancements
-        # Tokenize query for multi-match
-        q_tokens = [t for t in re.findall(r"[a-zA-Z0-9']+", ql) if t not in {'turn','on','off','the','a','my','all','and','to','set','please'}]
-        token_set = set(q_tokens)
 
-        # Identify all candidate entities in this domain present in query
-        matched_entities = []
+        generic_words = {'turn','on','off','the','a','my','and','to','set','please','light','lights','lamp','lamps','bulb','bulbs','downlight','downlights'}
+        q_tokens_raw = re.findall(r"[a-zA-Z0-9']+", ql)
+        token_set = set(q_tokens_raw)
+        content_tokens = {t for t in q_tokens_raw if t not in generic_words}
+        matched_entities: List[Tuple[str,str,str]] = []
+        select_all = ('all' in token_set or 'every' in token_set) and any(w in token_set for w in {'light','lights',domain, domain+'s'})
         for st in states:
             eid = st.get('entity_id','')
             if not eid.startswith(domain + '.'):
                 continue
-            fname = st.get('attributes', {}).get('friendly_name','')
+            fname = st.get('attributes',{}).get('friendly_name','')
             fname_l = fname.lower()
-            name_tokens = [t for t in re.findall(r"[a-zA-Z0-9']+", fname_l) if t not in {'the','a','and','of'}]
-            if 'all' in token_set and (domain in token_set or domain + 's' in token_set or any(t.endswith(domain) for t in token_set)):
-                matched_entities.append((eid,fname, st.get('state')))
-            else:
-                if any(nt in token_set for nt in name_tokens):
-                    matched_entities.append((eid,fname, st.get('state')))
+            name_tokens = [t for t in re.findall(r"[a-zA-Z0-9']+", fname_l) if t not in {'the','and','of'}]
+            if select_all:
+                matched_entities.append((eid, fname, st.get('state')))
+                continue
+            if content_tokens and any(nt in content_tokens for nt in name_tokens):
+                matched_entities.append((eid, fname, st.get('state')))
 
         if not matched_entities and target_entity:
-            matched_entities = [(target_entity, friendly, next((s.get('state') for s in states if s.get('entity_id')==target_entity), None))]
+            state_val = next((s.get('state') for s in states if s.get('entity_id')==target_entity), None)
+            matched_entities = [(target_entity, friendly, state_val)]
 
         if not matched_entities:
             return json.dumps({"type":"ha_result","error":"no_match","message":"I couldn't find a matching device."})
 
-        # Color & brightness parsing
-        color_words = ["red","blue","green","yellow","purple","pink","orange","white","warm white","cool white","cyan","magenta"]
-        color_name = None
-        # Longer phrases first
-        for cw in sorted(color_words, key=len, reverse=True):
-            if cw in ql:
-                color_name = cw
-                break
-        brightness_pct = None
-        m_pct = re.search(r"(\d{1,3})%", ql)
-        if m_pct:
-            pct = int(m_pct.group(1))
-            brightness_pct = max(1, min(100, pct))
-        else:
-            if re.search(r"\bhalf\b", ql): brightness_pct = 50
-            elif re.search(r"\b(full|max(imum)?|bright(est)?)\b", ql): brightness_pct = 100
-            elif re.search(r"\b(dim|low)\b", ql): brightness_pct = 25
-            elif re.search(r"\bmedium\b", ql): brightness_pct = 60
+        ordered_colors = detect_colors(ql)
+        color_name = ordered_colors[0] if ordered_colors else None
+        brightness_pct = detect_brightness(ql)
 
         if color_name and not action:
             action = 'turn_on'
-
         if not action:
             return json.dumps({"type":"ha_result","error":"no_action","message":"Need to know if you want them on or off."})
 
-        # Perform service calls
         results = []
-        for eid, fname, state_val in matched_entities:
-            svc_data = {"entity_id": eid}
+        multi_color_cycle: List[str] = []
+        if len(ordered_colors) > 1 and action == 'turn_on' and domain == 'light':
+            while len(multi_color_cycle) < len(matched_entities):
+                multi_color_cycle.extend(ordered_colors)
+            multi_color_cycle = multi_color_cycle[:len(matched_entities)]
+            random.shuffle(multi_color_cycle)
+        color_idx = 0
+        for eid,fname,state_val in matched_entities:
+            svc_data = {'entity_id': eid}
+            assigned_color = None
             if domain == 'light' and action == 'turn_on':
                 if brightness_pct is not None:
                     svc_data['brightness_pct'] = brightness_pct
-                if color_name:
-                    # Home Assistant supports color_name
-                    svc_data['color_name'] = color_name
+                if multi_color_cycle:
+                    assigned_color = multi_color_cycle[color_idx]; color_idx += 1
+                    svc_data['color_name'] = assigned_color
+                elif color_name:
+                    assigned_color = color_name; svc_data['color_name'] = assigned_color
             try:
                 svc = requests.post(
                     f"{base_url}/api/services/{domain}/{action}",
@@ -1411,41 +1545,42 @@ class SemanticParser:
                     timeout=5
                 )
                 success = svc.status_code in (200,201)
-                results.append({
-                    "entity_id": eid,
-                    "name": fname,
-                    "requested_action": action,
-                    "success": success,
-                    "code": svc.status_code,
-                    "state_before": state_val
-                })
-            except Exception as e:
-                results.append({
-                    "entity_id": eid,
-                    "name": fname,
-                    "requested_action": action,
-                    "success": False,
-                    "error": str(e)
-                })
+            except Exception:
+                success = False; svc = type('obj', (), {'status_code': 0})()
+            results.append({
+                'entity_id': eid,
+                'name': fname,
+                'requested_action': action,
+                'success': success,
+                'code': getattr(svc,'status_code',0),
+                'state_before': state_val,
+                'applied_color': assigned_color,
+                'applied_brightness_pct': brightness_pct
+            })
 
         success_names = [r['name'] for r in results if r['success']]
-        summary_parts = []
+        summary_parts: List[str] = []
         if success_names:
             verb = 'on' if action == 'turn_on' else 'off'
-            summary = f"Set {len(success_names)} {domain}{'s' if len(success_names)!=1 else ''} {verb}"
-            summary_parts.append(summary)
-        if color_name:
+            summary_parts.append(f"Set {len(success_names)} {domain}{'s' if len(success_names)!=1 else ''} {verb}")
+        if multi_color_cycle:
+            summary_parts.append(f"colors {', '.join(ordered_colors)}")
+        elif color_name:
             summary_parts.append(f"color {color_name}")
         if brightness_pct is not None:
             summary_parts.append(f"brightness {brightness_pct}%")
-        summary_text = (', '.join(summary_parts) + ".") if summary_parts else "Action attempted."
+        summary_text = (', '.join(summary_parts) + '.') if summary_parts else 'Action attempted.'
         return json.dumps({
-            "type": "ha_result",
-            "summary": summary_text,
-            "action": action,
-            "domain": domain,
-            "devices": results,
-            "applied": {"color_name": color_name, "brightness_pct": brightness_pct}
+            'type':'ha_result',
+            'summary': summary_text,
+            'action': action,
+            'domain': domain,
+            'devices': results,
+            'applied': {
+                'color_name': color_name,
+                'brightness_pct': brightness_pct,
+                'colors': ordered_colors if len(ordered_colors) > 1 else None
+            }
         })
 
     def _calculator_tool(self, entities: Dict[str, Any]) -> str:

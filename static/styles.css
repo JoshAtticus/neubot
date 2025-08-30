@@ -2176,14 +2176,33 @@ select {
     color: #fff;
 }
 
-/* Home Assistant widget */
-.ha-widget { margin-top:12px;padding:12px;border:1px solid #333;border-radius:8px;background:#181818;font-size:14px; }
-.ha-device-list { display:flex;flex-direction:column;gap:6px;margin-bottom:8px; }
-.ha-device-row { display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border:1px solid #2a2a2a;border-radius:6px;background:#202020; }
-.ha-device-row .ha-name { font-weight:600; }
-.ha-status.ok { color:#46c46a; }
-.ha-status.err { color:#ff6565; }
-.ha-inline-controls { display:flex;gap:8px;flex-wrap:wrap;align-items:center; }
-.ha-inline-controls input[type=range] { width:140px; }
-.ha-inline-controls .ha-color { background:#111;border:1px solid #333;color:#eee;padding:6px 8px;border-radius:6px; }
-.ha-inline-controls .ha-apply { background:#2d6cdf;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600; }
+/* Home Assistant inline device list */
+.ha-devices-inline { margin:4px 0 2px 0;font-size:12px;line-height:1.35;color:#d7dbe0; }
+.ha-device-lines { list-style:none;margin:4px 0 0 0;padding:0; }
+.ha-device-lines li { display:flex;justify-content:space-between;gap:24px;padding:2px 0;border-top:1px solid #1d2228; }
+.ha-device-lines li:first-child { border-top:none; }
+.ha-device-lines .n { flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500; }
+.ha-device-lines .s { min-width:28px;text-align:right;font-variant:all-small-caps;letter-spacing:.04em; }
+.ha-device-lines .s.ok { color:#37c582; }
+.ha-device-lines .s.err { color:#ff5a67; }
+
+/* New HA block card */
+.ha-block { margin:10px 0 4px; background:#121417; border:1px solid #1f252c; border-radius:10px; font-size:12px; color:#d5dae0; box-shadow:0 1px 2px rgba(0,0,0,.4); overflow:hidden; }
+.ha-block-header { display:flex; align-items:center; gap:8px; padding:8px 12px 6px; font-weight:600; letter-spacing:.03em; font-size:12px; text-transform:uppercase; color:#8b96a3; position:relative; }
+.ha-block-header .ha-ico { font-size:14px; line-height:1; }
+.ha-dev-list { list-style:none; margin:0; padding:4px 0 6px; }
+.ha-dev-list li { display:flex; align-items:center; justify-content:space-between; padding:4px 12px; gap:16px; border-top:1px solid #1b2026; }
+.ha-dev-list li:first-child { border-top:none; }
+.ha-dev-list li.empty { color:#888; font-style:italic; }
+.ha-dev-list .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500; }
+.ha-dev-list .st { display:flex; align-items:center; gap:5px; font-variant:all-small-caps; letter-spacing:.05em; font-weight:600; }
+.ha-dev-list .st .dot { width:7px; height:7px; border-radius:50%; background:#444; display:inline-block; box-shadow:0 0 0 1px #222; }
+.ha-dev-list .st.on { color:#3ecf8e; }
+.ha-dev-list .st.on .dot { background:#3ecf8e; }
+.ha-dev-list .st.off { color:#889099; }
+.ha-dev-list .st.off .dot { background:#465059; }
+.ha-dev-list .st.err { color:#ff5a67; }
+.ha-dev-list .st.err .dot { background:#ff5a67; }
+.ha-color-chip { width:14px; height:14px; border-radius:4px; background:var(--ha-chip-color,#fff); box-shadow:0 0 0 1px rgba(255,255,255,.15),0 0 0 2px rgba(0,0,0,.4) inset; margin-left:auto; position:absolute; right:12px; top:50%; transform:translateY(-50%); }
+.ha-dev-list .ha-mini-chip { width:10px; height:10px; display:inline-block; border-radius:3px; background:var(--ha-chip-color,#fff); margin-left:6px; box-shadow:0 0 0 1px rgba(255,255,255,.2),0 0 0 1px rgba(0,0,0,.6) inset; vertical-align:middle; }
+.ha-dev-list .ha-mini-br { margin-left:4px; font-size:10px; color:#7c858f; font-weight:500; vertical-align:middle; }
