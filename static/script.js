@@ -137,90 +137,18 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    function detectVirtualKeyboard() {
-        if (window.innerWidth <= 1024) {
-            if (visualViewportSupported) {
-                const heightDifference = initialWindowHeight - window.visualViewport.height;
-                const isKeyboardOpen = heightDifference > 150;
-                
-                if (isKeyboardOpen) {
-                    document.body.classList.add('keyboard-open');
-                    
-                    if (isAndroid) {
-                        const viewportBottom = window.visualViewport.offsetTop + window.visualViewport.height;
-                        inputAreaContainer.style.bottom = `${window.innerHeight - viewportBottom}px`;
-                    }
-                    
-                    setTimeout(scrollToBottom, 100);
-                } else {
-                    document.body.classList.remove('keyboard-open');
-                    if (isAndroid) {
-                        inputAreaContainer.style.bottom = '0';
-                    }
-                }
-            } 
-            else {
-                const heightDifference = initialWindowHeight - window.innerHeight;
-                const isKeyboardOpen = heightDifference > 150;
-                
-                if (isKeyboardOpen) {
-                    document.body.classList.add('keyboard-open');
-                    setTimeout(scrollToBottom, 100);
-                } else {
-                    document.body.classList.remove('keyboard-open');
-                }
-            }
-        }
-    }
-    
-    window.addEventListener('orientationchange', function() {
-        setTimeout(() => {
-            initialWindowHeight = window.innerHeight;
-            if (visualViewportSupported && window.visualViewport) {
-                initialWindowHeight = window.visualViewport.height;
-            }
-        }, 300);
-    });
+    // Clean up any leftover class on load
+    document.body.classList.remove('keyboard-open');
 
-    if (visualViewportSupported) {
-        window.visualViewport.addEventListener('resize', function() {
-            detectVirtualKeyboard();
-        });
-        
-        window.visualViewport.addEventListener('scroll', function() {
-            if (isAndroid && document.body.classList.contains('keyboard-open')) {
-                const viewportBottom = window.visualViewport.offsetTop + window.visualViewport.height;
-                inputAreaContainer.style.bottom = `${window.innerHeight - viewportBottom}px`;
-            }
-        });
-    } else {
-        window.addEventListener('resize', function() {
-            detectVirtualKeyboard();
-        });
+    // Remove listeners if they exist (defensive)
+    if (window.visualViewport) {
+        try { window.visualViewport.removeEventListener('resize', detectVirtualKeyboard); } catch(e) {}
+        try { window.visualViewport.removeEventListener('scroll', detectVirtualKeyboard); } catch(e) {}
     }
-    
-    queryInput.addEventListener('focus', function() {
-        if (window.innerWidth <= 1024) {
-            document.body.classList.add('keyboard-open');
-            setTimeout(() => {
-                scrollToBottom();
-                if (isAndroid) {
-                    setTimeout(scrollToBottom, 500);
-                }
-            }, 300);
-        }
-    });
-    
-    queryInput.addEventListener('blur', function() {
-        if (window.innerWidth <= 1024) {
-            setTimeout(() => {
-                document.body.classList.remove('keyboard-open');
-                if (isAndroid) {
-                    inputAreaContainer.style.bottom = '0';
-                }
-            }, 100);
-        }
-    });
+
+    // Strip focus/blur handlers affecting keyboard-open
+    queryInput.onfocus = null;
+    queryInput.onblur = null;
     
     function loadSettings() {
         const savedHighlight = localStorage.getItem('neubot_highlight_enabled');
@@ -850,4 +778,21 @@ document.addEventListener('DOMContentLoaded', function() {
     updateRateLimits();
 });
 
-// Removed Spotify player helper (createSpotifyPlayerForChat) as Spotify integration was deprecated.
+// Lightweight keyboard handling: adjust container height to visible viewport
+    let vvSupported = 'visualViewport' in window;
+    function applyViewportResize() {
+        if (window.innerWidth > 1024) return;
+        const container = document.querySelector('.container');
+        if (!container) return;
+        let h = window.innerHeight;
+        if (vvSupported) h = window.visualViewport.height;
+        container.style.height = h + 'px';
+    }
+    if (vvSupported) {
+        window.visualViewport.addEventListener('resize', applyViewportResize);
+        window.visualViewport.addEventListener('scroll', applyViewportResize);
+    } else {
+        window.addEventListener('resize', applyViewportResize);
+    }
+    queryInput.addEventListener('focus', applyViewportResize);
+    queryInput.addEventListener('blur', function(){ setTimeout(()=>{ document.querySelector('.container').style.height='100vh'; },120); });

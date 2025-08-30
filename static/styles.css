@@ -23,7 +23,9 @@ html {
     box-sizing: border-box;
     height: 100%;
     touch-action: manipulation;
+    -webkit-text-size-adjust: 100%; /* Prevent iOS font auto-enlarge */
 }
+
 
 *, *:before, *:after {
     box-sizing: inherit;
@@ -50,6 +52,7 @@ body {
     display: grid;
     grid-template-rows: auto 1fr auto;
     height: 100vh;
+    transition: height .25s ease;
     position: relative;
 }
 
@@ -136,9 +139,9 @@ h1 {
 
 #query-input {
     flex: 1;
-    padding: 15px 20px;
+    padding: 14px 20px; /* Slightly reduce to stay under zoom threshold */
     padding-right: 50px;
-    font-size: 16px;
+    font-size: 16px; /* Keep at 16px to avoid iOS zoom */
     background-color: #2a2a2a;
     border: none;
     border-radius: 20px;
@@ -147,9 +150,11 @@ h1 {
     transition: box-shadow 0.3s ease, background-color 0.3s ease;
     width: calc(100% - 55px);
     max-width: 100%;
-    font-size: 16px;
     touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
 }
+
+/* Removed keyboard-open transitions */
 
 #query-input::placeholder {
     color: #777;
@@ -1559,81 +1564,9 @@ input:focus + .toggle-slider {
     transform: rotate(90deg);
 }
 
-body.keyboard-open {
-    height: 100%;
-    overflow: hidden;
-    position: relative;
-}
+/* keyboard-open handling removed */
 
-body.keyboard-open .container {
-    height: auto;
-    padding-bottom: 0;
-}
-
-body.keyboard-open .chat-container {
-    max-height: calc(100vh - 180px);
-    overflow-y: auto;
-    padding-bottom: 60px; 
-}
-
-
-body.keyboard-open .input-area-container {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    margin: 0 auto;
-    padding-bottom: 5px;
-    background-color: #1a1a1a;
-    z-index: 100;
-}
-
-@supports (-webkit-touch-callout: none) and (not (-webkit-appearance: none)) {
-    body.keyboard-open .chat-container {
-        height: calc(100% - 120px);
-    }
-    
-    body.keyboard-open .input-area-container {
-        position: fixed;
-        bottom: 0;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 100%;
-        max-width: 900px;
-    }
-}
-
-@supports (-webkit-appearance: none) {
-    body.keyboard-open {
-        position: fixed;
-        width: 100%;
-    }
-    
-    body.keyboard-open .header-container {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-    }
-    
-    body.keyboard-open .chat-container {
-        padding-top: 70px;
-        height: calc(100vh - 130px);
-        max-height: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 60px;
-        overflow-y: auto;
-    }
-    
-    body.keyboard-open .input-area-container {
-        background-color: #1a1a1a;
-        padding-top: 10px;
-        max-width: 900px;
-    }
-}
+/* Removed complex @supports variants that triggered layout jumps */
 
 /* Removed Spotify player chat styles (integration deprecated) */
 

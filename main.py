@@ -506,12 +506,12 @@ class SemanticParser:
         ]
         
         self.greeting_responses = [
-            "Hello to you too!",
-            "Hi there!",
-            "Hey!",
-            "Nice to see you!",
-            "Greetings!",
-            "Hello!"
+            "Hello to you too",
+            "Hi there",
+            "Hey",
+            "Nice to see you",
+            "Greetings",
+            "Hello"
         ]
         
         self.known_tools = {
@@ -636,7 +636,6 @@ class SemanticParser:
             if tool == "homeassistant":
                 ha_entities = self._extract_ha_entities(query)
                 entities.update(ha_entities)
-                # Pass full query to downstream HA tool for fallback parsing
                 entities.setdefault("search_query", query)
         
         self._add_thought("Extracted entities", entities)
@@ -876,9 +875,7 @@ class SemanticParser:
         self._add_thought("Extracting search query", None)
         q = query.strip()
         lowered = q.lower()
-        # Remove punctuation at ends
         lowered = lowered.strip("?!. ")
-        # Remove leading activation phrases
         patterns = [
             r"^(search for|search|look up|find|tell me about|what is|who is|where is|when is)\s+",
         ]
@@ -887,7 +884,6 @@ class SemanticParser:
             modified = re.sub(pat, "", modified)
         modified = modified.strip()
         if not modified or modified == lowered:
-            # fallback: if original contains 'search for', take substring after it
             for key in ["search for", "search", "look up", "find", "tell me about"]:
                 if key in lowered:
                     idx = lowered.find(key) + len(key)
@@ -908,14 +904,12 @@ class SemanticParser:
         ql = query.lower()
         result: Dict[str, Any] = {}
 
-        # Action: prefer two-word verb phrases
         action = None
         for phrase, canonical in self.ha_action_verbs.items():
             if " " in phrase and phrase in ql:
                 action = canonical
                 break
         if not action:
-            # Single token verbs / states
             tokens = re.findall(r"\b\w+\b", ql)
             for i, tok in enumerate(tokens):
                 if tok in self.ha_action_verbs and len(tok) > 2:  # avoid 'on'/'off' first
@@ -930,7 +924,6 @@ class SemanticParser:
         if action:
             result["ha_action"] = action
 
-        # Domain
         domain = None
         for term, canonical in self.ha_domain_terms.items():
             if re.search(rf"\b{re.escape(term)}\b", ql):
@@ -939,20 +932,17 @@ class SemanticParser:
         if domain:
             result["ha_domain"] = domain
 
-        # Area / room heuristic: words before domain term
         ha_area = None
         if domain:
             m = re.search(rf"\b([a-zA-Z ]{{2,40}}?)\b(?:{domain}|{domain}s|lamp|lamps|bulb|bulbs)\b", ql)
             if m:
                 candidate = m.group(1).strip()
-                # Remove leading verbs/stop words
                 candidate = re.sub(r"\b(turn|switch|set|activate|run|start|stop|on|off|the|my|a|to)\b", "", candidate).strip()
                 if 0 < len(candidate.split()) <= 3:
                     ha_area = candidate
         if ha_area:
             result["ha_area"] = ha_area
 
-        # Device phrase: capture adjective/noun sequence ending in domain synonym
         device_phrase = None
         domain_pattern = "|".join(sorted(set(self.ha_domain_terms.keys()), key=len, reverse=True))
         dm = re.search(rf"\b([a-zA-Z0-9 ]{{2,50}}?\b(?:{domain_pattern}))\b", ql)
@@ -1008,20 +998,31 @@ class SemanticParser:
         
         if greeting_only:
             import random
+            if current_user.is_authenticated:
+                user_name = current_user.name.split()[0] if current_user.name else None
+            else:
+                user_name = None
             greeting_response = random.choice(self.greeting_responses)
+            if user_name:
+                greeting_response = f"{greeting_response} {user_name}!"  # add name before follow-up
             greeting_response += " How can I help you?"
             self._add_thought("Responding with greeting only", greeting_response)
             return greeting_response, self.thoughts, None
-        
+
+        if re.search(r"\b(what'?s|what is|tell me|say) (?:my )?name\b", query_lower):
+            if current_user.is_authenticated:
+                if current_user.name:
+                    first = current_user.name.split()[0]
+                    return f"Your name is {first}", self.thoughts, None
+                return "Sorry, something went wrong.", self.thoughts, None
+            else:
+                return "Sorry, I don't know what your name is because you haven't signed in yet", self.thoughts, None
         tools = self._identify_tools(tokens)
         
-        # Check for calculator expressions first
         math_expression = self._extract_math_expression(query)
         if math_expression or query_type == "calculator_query" or "calculate" in query_lower or "compute" in query_lower or "solve" in query_lower:
             tools.add("calculator")
             self._add_thought("Inferred calculator tool from query", math_expression)
-
-        # Music/Spotify detection removed.
 
         if not tools:
             self._add_thought("No explicit tools found, inferring from context", None)
@@ -1038,13 +1039,12 @@ class SemanticParser:
                 tools.add("day")
                 self._add_thought("Inferred tool from context", "day")
 
-        # Home Assistant natural language detection (verbs + domains). Detect before entity extraction.
         ha_detect = False
         for term in self.ha_domain_terms.keys():
             if re.search(rf"\b{re.escape(term)}\b", query_lower):
                 ha_detect = True
                 break
-        if ha_detect and re.search(r"\b(turn|switch|activate|run|start|stop|on|off|set|dim|brighten|open|close)\b", query_lower):
+        if ha_detect and re.search(r"\b(turn|switch|activate|run|start|stop|on|off|set|dim|brighten)\b", query_lower):
             if "homeassistant" not in tools:
                 tools.add("homeassistant")
                 self._add_thought("Inferred Home Assistant tool from verbs/domains", None)
@@ -1054,11 +1054,8 @@ class SemanticParser:
 
         entities["user_timezone"] = user_timezone
 
-        # Add search query for calculator
         if "calculator" in tools or "calc" in tools:
             entities["search_query"] = query
-
-        # Removed spotify entity injection.
 
         use_search = False
         if len(tools) == 0:
@@ -1209,8 +1206,6 @@ class SemanticParser:
                 "error": "Search failed"
             })
 
-    # Removed Spotify action extraction & tool.
-
     def _home_assistant_tool(self, entities: Dict[str, Any]) -> str:
         """Execute simple Home Assistant device commands based on natural language.
 
@@ -1219,8 +1214,6 @@ class SemanticParser:
         self._add_thought("Executing Home Assistant tool", None)
         if not current_user.is_authenticated:
             return "You need to login and link Home Assistant first."
-
-        # Load link info
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute('SELECT base_url, access_token, refresh_token, expires_at FROM home_assistant_links WHERE user_id = ?', (current_user.id,))
@@ -1245,7 +1238,6 @@ class SemanticParser:
         query = entities.get('search_query') or ''
         ql = query.lower()
 
-        # Refresh token if expired
         now_ts = int(time.time())
         if expires_at and expires_at < now_ts - 30 and refresh_token:
             try:
@@ -1268,13 +1260,11 @@ class SemanticParser:
             except Exception:
                 pass  # silent fallback
 
-        # Structured entities first
         action = entities.get('ha_action')
         domain = entities.get('ha_domain')
         area = entities.get('ha_area')
         device_phrase = entities.get('ha_device_phrase')
 
-        # Fallback regex detection
         if not action:
             if re.search(r"\b(turn on|switch on|activate|start|run)\b", ql):
                 action = 'turn_on'
@@ -1290,7 +1280,6 @@ class SemanticParser:
         if not domain:
             return json.dumps({"type":"ha_result","error":"no_domain","message":"I couldn't determine what device you want to control."})
 
-        # Area detection fallback
         room = area
         if not room:
             room_match = re.search(r"\b(?:my|the)?\s*([a-zA-Z ]+?)\s+(?:light|lights|fan|fans|switch|switches|lamp|lamps|bulb|bulbs)\b", ql)
@@ -1299,7 +1288,6 @@ class SemanticParser:
                 if cand and len(cand.split()) <= 3 and not re.search(r"turn|on|off|activate|run|switch|set|dim|brighten", cand):
                     room = cand
 
-        # Fetch states
         try:
             resp = requests.get(
                 f"{base_url}/api/states",
@@ -1354,7 +1342,6 @@ class SemanticParser:
             action_regex_on = re.compile(r"\b(turn on|switch on|set .*? to|set .*? on|activate|enable)\b")
             action_regex_off = re.compile(r"\b(turn off|switch off|deactivate|disable)\b")
 
-            # Pre-tokenize entity names
             entity_name_tokens: Dict[str, Tuple[str, Set[str], str]] = {}
             for st in states:
                 eid = st.get('entity_id','')
@@ -1427,7 +1414,7 @@ class SemanticParser:
                             success = svc.status_code in (200,201)
                         except Exception as e:
                             success = False
-                            svc = type('obj', (), {'status_code': 0})()  # simple placeholder
+                            svc = type('obj', (), {'status_code': 0})()
                             assigned_error = str(e)
                         results.append({
                             'entity_id': eid,
@@ -1457,8 +1444,6 @@ class SemanticParser:
                 })
             # else fall through to single-clause path using original query elements
 
-        # -------------- Single clause path --------------
-        # Identify probable entities
         target_entity = None
         friendly = None
         phrase_tokens: List[str] = []
@@ -1592,27 +1577,16 @@ class SemanticParser:
             return "I need a mathematical expression to calculate. Try something like '5 + 3' or '10 * 4'."
         
         try:
-            # Safe evaluation of mathematical expressions
-            # First replace text operators with symbols
             expression = math_expression.lower()
             expression = re.sub(r'\bplus\b', '+', expression)
             expression = re.sub(r'\bminus\b', '-', expression)
             expression = re.sub(r'\btimes\b|\bmultiplied by\b', '*', expression)
             expression = re.sub(r'\bdivided by\b', '/', expression)
-            
-            # Clean the expression
             cleaned_expr = re.sub(r'[^0-9+\-*/().\s]', '', expression)
             cleaned_expr = cleaned_expr.strip()
-            
-            # Evaluate the expression
             self._add_thought("Evaluating expression", cleaned_expr)
-            
-            # Use a restricted eval for safety
             result = eval(cleaned_expr, {"__builtins__": {}})
-            
             self._add_thought("Calculation result", result)
-            
-            # Format the result based on type
             if isinstance(result, int):
                 return f"The result of {math_expression} is {result}."
             else:
@@ -1628,7 +1602,6 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = False  # ENSURE THIS IS TRUE FOR PRODUCTION
 
-# Enable CORS for all routes and origins
 CORS(app, origins="*", supports_credentials=True)
 
 login_manager = LoginManager()
@@ -1658,7 +1631,6 @@ oauth.register(
     client_kwargs={'scope': 'user:email'},
 )
 
-# JoshAtticusID oauth registration removed (and related routes pruned)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -1832,8 +1804,6 @@ def login_app_github():
     redirect_uri = url_for('auth_app_github_callback', _external=True)
     return oauth.github.authorize_redirect(redirect_uri, state=state)
 
-## JoshAtticusID app login removed
-
 @app.route('/auth/app/google/callback')
 def auth_app_google_callback():
     """Handle Google OAuth callback for app"""
@@ -1914,8 +1884,6 @@ def auth_app_github_callback():
     app_token = generate_app_token(user_id)
     return redirect(callback_url.replace('[TOKEN]', app_token))
 
-## JoshAtticusID app callback removed
-
 def generate_app_token(user_id):
     """Generate and store a new app token for a user"""
     token = secrets.token_urlsafe(32)
@@ -1936,8 +1904,6 @@ def login_google():
     
     redirect_uri = url_for('auth_google', _external=True)
     return oauth.google.authorize_redirect(redirect_uri, state=state)
-
-## JoshAtticusID login removed
 
 @app.route('/auth/google')
 def auth_google():
@@ -1978,8 +1944,6 @@ def auth_google():
     login_user(user)
     
     return redirect('/')
-
-## JoshAtticusID auth callback removed
 
 @app.route('/login/github')
 def login_github():
@@ -2034,8 +1998,6 @@ def auth_github():
     
     return redirect('/')
 
-## Spotify login & callback removed (legacy)
-
 @app.route('/integrations')
 @login_required
 def integrations_page():
@@ -2047,9 +2009,6 @@ def integrations_page():
 def ha_setup_page():
     return send_from_directory('static', 'home-assistant-setup.html')
 
-## All Spotify endpoints removed
-
-# -------- Home Assistant Integration (OAuth Auth API) --------
 @app.route('/api/integrations/home-assistant/start', methods=['POST'])
 @login_required
 def ha_start():
