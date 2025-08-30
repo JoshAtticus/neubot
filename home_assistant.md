@@ -1,12 +1,33 @@
 # Exposing Home Assistant to the Internet for use with neubot
 neubot requires that your Home Assistant instance is externally accessible, and there are various ways to do this. 
 
+## Home Assistant Cloud
+**Difficulty**: Easy
+
+> [!NOTE]
+>
+> This method **requires** payment
+
+**Requirements**
+- Home Assistant Cloud Subscription (new users get first 30 days free)
+
+**Step 1**
+
+Click the button below to open Home Assistant Cloud settings and copy your Home Assistant Cloud URL
+
+[![Open your Home Assistant instance and show your Home Assistant Cloud configuration.](https://my.home-assistant.io/badges/cloud.svg)](https://my.home-assistant.io/redirect/cloud/)
+
+
 ## Cloudflared Addon (recommended)
 **Difficulty**: Moderate
 
+> [!NOTE]
+>
+> This method **may require** payment
+
 **Requirements**
 - Free Cloudflare Account
-- Domain name connected to your Cloudflare account (please note that domains from **Freenom** cannot be used, please find another registrar)
+- Domain name connected to your Cloudflare account (please note that free domains from **Freenom** cannot be used, if you need a **free** domain you can get one from https://domain.digitalplat.org or https://nic.eu.org)
 - Home Assistant Installation with **addons** support
 
 **Step 1**
