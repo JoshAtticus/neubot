@@ -349,7 +349,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const detailsId = 'details-' + Date.now();
         const toggleId = 'toggle-' + Date.now();
         
-        let spotifyData = null;
         let searchResults = null;
         let plainText = text;
         
@@ -358,22 +357,16 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.type === 'search_results') {
                 searchResults = data;
                 plainText = null;
-            } else if (data.type === 'spotify_track') {
-                spotifyData = data;
-                plainText = null;
             }
         } catch (e) {
-            const jsonRegex = /\{"type":\s*"(spotify_track|search_results)".*\}/gs;
+            const jsonRegex = /\{"type":\s*"(search_results)".*\}/gs;
             const match = text.match(jsonRegex);
             
             if (match) {
                 try {
                     const jsonData = JSON.parse(match[0]);
                     
-                    if (jsonData.type === 'spotify_track') {
-                        spotifyData = jsonData;
-                        plainText = text.replace(jsonRegex, '').trim();
-                    } else if (jsonData.type === 'search_results') {
+                    if (jsonData.type === 'search_results') {
                         searchResults = jsonData;
                         plainText = text.replace(jsonRegex, '').trim();
                     }
@@ -412,17 +405,7 @@ document.addEventListener('DOMContentLoaded', function() {
             messageContent.appendChild(searchResultsDiv);
         }
         
-        if (spotifyData) {
-            const trackData = {
-                trackName: spotifyData.track_name,
-                artist: spotifyData.artist,
-                albumArt: spotifyData.album_art,
-                trackUrl: spotifyData.track_url
-            };
-            
-            const playerElement = createSpotifyPlayerForChat(trackData);
-            messageContent.appendChild(playerElement);
-        }
+    // Spotify track rendering removed (integration deprecated)
         
         const detailsElement = document.createElement('div');
         detailsElement.id = detailsId;
@@ -779,49 +762,4 @@ document.addEventListener('DOMContentLoaded', function() {
     updateRateLimits();
 });
 
-function createSpotifyPlayerForChat(trackData) {
-    const playerContainer = document.createElement('div');
-    playerContainer.className = 'spotify-player-chat';
-    
-    const albumArt = document.createElement('div');
-    albumArt.className = 'spotify-album-art';
-    
-    const albumImg = document.createElement('img');
-    albumImg.src = trackData.albumArt || 'https://via.placeholder.com/60?text=No+Image';
-    albumImg.alt = 'Album Art';
-    albumArt.appendChild(albumImg);
-    
-    const trackInfo = document.createElement('div');
-    trackInfo.className = 'spotify-track-info';
-    
-    const trackName = document.createElement('div');
-    trackName.className = 'spotify-track-name';
-    trackName.textContent = trackData.trackName;
-    trackInfo.appendChild(trackName);
-    
-    const artistName = document.createElement('div');
-    artistName.className = 'spotify-track-artist';
-    artistName.textContent = trackData.artist;
-    trackInfo.appendChild(artistName);
-    
-    const attribution = document.createElement('div');
-    attribution.className = 'spotify-attribution';
-    
-    const spotifyLink = document.createElement('a');
-    spotifyLink.href = trackData.trackUrl || 'https://open.spotify.com/';
-    spotifyLink.target = '_blank';
-    spotifyLink.textContent = 'Powered by ';
-    
-    const spotifyLogo = document.createElement('img');
-    spotifyLogo.src = 'https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_Green.png';
-    spotifyLogo.alt = 'Spotify';
-    
-    spotifyLink.appendChild(spotifyLogo);
-    attribution.appendChild(spotifyLink);
-    trackInfo.appendChild(attribution);
-    
-    playerContainer.appendChild(albumArt);
-    playerContainer.appendChild(trackInfo);
-    
-    return playerContainer;
-}
+// Removed Spotify player helper (createSpotifyPlayerForChat) as Spotify integration was deprecated.

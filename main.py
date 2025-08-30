@@ -19,8 +19,6 @@ import time
 import uuid
 import secrets
 from urllib.parse import urlparse
-import spotipy
-from spotipy.oauth2 import SpotifyOAuth, CacheHandler
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from authlib.integrations.flask_client import OAuth
 import contextlib
@@ -38,11 +36,6 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
-JOSHATTICUS_CLIENT_ID = os.getenv("JOSHATTICUS_CLIENT_ID")
-JOSHATTICUS_CLIENT_SECRET = os.getenv("JOSHATTICUS_CLIENT_SECRET")
-SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID", "")
-SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET", "")
-SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://localhost:5300/auth/spotify/callback")
 SECRET_KEY = os.getenv("SECRET_KEY", secrets.token_hex(16))
 
 DEFAULT_TIMEZONE = "America/New_York"
@@ -55,11 +48,6 @@ USER_WEATHER_RATE_LIMIT = 30  # requests per month for logged-in users
 USER_SEARCH_RATE_LIMIT = 50   # requests per month for logged-in users
 USER_TOTAL_QUERY_LIMIT = 500  # total requests per month for logged-in users
 
-SPOTIFY_SCOPES = [
-    "user-read-playback-state", 
-    "user-modify-playback-state", 
-    "user-read-currently-playing"
-]
 
 DB_FILE = "neubot.db"
 
@@ -152,14 +140,28 @@ def init_db():
         ''')
         
         cursor.execute('''
-        CREATE TABLE IF NOT EXISTS spotify_tokens (
+        CREATE TABLE IF NOT EXISTS home_assistant_links (
             user_id TEXT PRIMARY KEY,
+            base_url TEXT NOT NULL,
             access_token TEXT NOT NULL,
-            refresh_token TEXT NOT NULL,
-            expires_at INTEGER NOT NULL,
+            refresh_token TEXT,
+            expires_at INTEGER,
+            created_at DATETIME NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
         ''')
+        cursor.execute("PRAGMA table_info(home_assistant_links)")
+        ha_cols = [row[1] for row in cursor.fetchall()]
+        if 'refresh_token' not in ha_cols:
+            try:
+                cursor.execute('ALTER TABLE home_assistant_links ADD COLUMN refresh_token TEXT')
+            except Exception:
+                pass
+        if 'expires_at' not in ha_cols:
+            try:
+                cursor.execute('ALTER TABLE home_assistant_links ADD COLUMN expires_at INTEGER')
+            except Exception:
+                pass
         cursor.execute("DROP TABLE IF EXISTS app_tokens")
         cursor.execute('''
         CREATE TABLE app_tokens (
@@ -186,108 +188,6 @@ def init_db():
         
         conn.commit()
 
-class DatabaseCacheHandler(CacheHandler):
-    """Custom cache handler that stores tokens in the database instead of the filesystem"""
-    
-    def __init__(self, user_id=None):
-        self.user_id = user_id
-    
-    def get_cached_token(self):
-        """Get token from database"""
-        if not self.user_id:
-            return None
-            
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            
-            cursor.execute("SELECT * FROM spotify_tokens WHERE user_id=?", (self.user_id,))
-            token_data = cursor.fetchone()
-            
-            if not token_data:
-                return None
-            
-            try:
-                access_token = decrypt_token(token_data["access_token"])
-                refresh_token = decrypt_token(token_data["refresh_token"])
-            except Exception as e:
-                access_token = token_data["access_token"]
-                refresh_token = token_data["refresh_token"]
-                
-            return {
-                "access_token": access_token,
-                "refresh_token": refresh_token,
-                "expires_at": token_data["expires_at"],
-                "token_type": "Bearer",
-                "scope": " ".join(SPOTIFY_SCOPES)
-            }
-    
-    def save_token_to_cache(self, token_info):
-        """Save token to database with encryption"""
-        if not self.user_id:
-            return
-            
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            
-            encrypted_access_token = encrypt_token(token_info["access_token"])
-            encrypted_refresh_token = encrypt_token(token_info["refresh_token"])
-            
-            cursor.execute(
-                """
-                INSERT OR REPLACE INTO spotify_tokens 
-                (user_id, access_token, refresh_token, expires_at) 
-                VALUES (?, ?, ?, ?)
-                """,
-                (
-                    self.user_id,
-                    encrypted_access_token,
-                    encrypted_refresh_token,
-                    token_info["expires_at"]
-                )
-            )
-            
-            conn.commit()
-
-def get_spotify_client(user_id=None):
-    """
-    Get a configured Spotipy client for a user or the app
-    """
-    if not user_id:
-        auth_manager = SpotifyOAuth(
-            client_id=SPOTIFY_CLIENT_ID,
-            client_secret=SPOTIFY_CLIENT_SECRET,
-            redirect_uri=SPOTIFY_REDIRECT_URI,
-            scope=' '.join(SPOTIFY_SCOPES),
-            cache_handler=DatabaseCacheHandler()
-        )
-        return spotipy.Spotify(auth_manager=auth_manager)
-    
-    cache_handler = DatabaseCacheHandler(user_id)
-    token_info = cache_handler.get_cached_token()
-    
-    if not token_info:
-        return None
-    
-    now = int(time.time())
-    
-    if token_info['expires_at'] < now:
-        auth_manager = SpotifyOAuth(
-            client_id=SPOTIFY_CLIENT_ID,
-            client_secret=SPOTIFY_CLIENT_SECRET,
-            redirect_uri=SPOTIFY_REDIRECT_URI,
-            scope=' '.join(SPOTIFY_SCOPES),
-            cache_handler=cache_handler
-        )
-        
-        try:
-            new_token = auth_manager.refresh_access_token(token_info['refresh_token'])
-            cache_handler.save_token_to_cache(new_token)
-            return spotipy.Spotify(auth=new_token['access_token'])
-        except Exception as e:
-            print(f"Error refreshing token: {str(e)}")
-            return None
-    
-    return spotipy.Spotify(auth=token_info['access_token'])
 
 class RateLimiter:
     def __init__(self):
@@ -610,18 +510,20 @@ class SemanticParser:
             "date": self._get_date,
             "day": self._get_day,
             "search": self._web_search_tool,
-            "spotify": self._spotify_tool,
-            "music": self._spotify_tool,
             "calculator": self._calculator_tool,
             "calc": self._calculator_tool,
+            "homeassistant": self._home_assistant_tool,
         }
         
         self.entity_types = {
             "location": self._extract_location,
             "date": self._extract_date,
-            "spotify_action": self._extract_spotify_action,
             "math_expression": self._extract_math_expression,
         }
+
+        self.search_indicator_phrases = [
+            "what is", "who is", "where is", "when is", "tell me about", "look up", "find", "search for"
+        ]
     
     def _reset_thoughts(self):
         """Clear previous thoughts"""
@@ -658,7 +560,14 @@ class SemanticParser:
         
         if not found_tools:
             self._add_thought("No specific tools referenced", None)
-            
+        
+        lowered = " ".join(tokens).lower()
+        for phrase in self.search_indicator_phrases:
+            if lowered.startswith(phrase) or f" {phrase} " in lowered:
+                if "search" not in found_tools:
+                    found_tools.add("search")
+                    self._add_thought("Inferred search tool from phrase", phrase)
+                break
         return found_tools
     def _extract_entities(self, query: str, tools: Set[str]) -> Dict[str, Any]:
         """Extract relevant entities based on identified tools"""
@@ -691,7 +600,6 @@ class SemanticParser:
         
         title_query = query.title()
         
-        # Look for location in time-specific queries
         time_location_pattern = r"\btime\s+(?:in|at|for)\s+([A-Za-z][A-Za-z\s-]+?)(?=$|[.?!,]|\s+(?:and|with|at|is|are|was|were))"
         time_match = re.search(time_location_pattern, title_query, re.IGNORECASE)
         if time_match:
@@ -699,7 +607,6 @@ class SemanticParser:
             self._add_thought("Found location in time query", location)
             return location
         
-        # Standard pattern looking for preposition + location
         prep_pattern = r"\b(?:in|at|for)\s+([A-Za-z][A-Za-z\s-]+?)(?=$|[.?!,]|\s+(?:and|with|at|is|are|was|were))"
         prep_match = re.search(prep_pattern, title_query, re.IGNORECASE)
         if prep_match:
@@ -868,13 +775,11 @@ class SemanticParser:
             pattern = fr'\b{tool}\b'
             result = re.sub(pattern, f'<span class="tool-reference">{tool}</span>', result, flags=re.IGNORECASE)
         
-        # Highlight math operators
         math_operators = ["plus", "minus", "times", "divided by", "multiplied by"]
         for operator in math_operators:
             pattern = fr'\b{operator}\b'
             result = re.sub(pattern, f'<span class="math-operator">{operator}</span>', result, flags=re.IGNORECASE)
             
-        # Highlight symbol operators
         symbol_pattern = r'([-+*/])'
         result = re.sub(symbol_pattern, r'<span class="math-operator">\1</span>', result)
         
@@ -884,6 +789,67 @@ class SemanticParser:
             result = re.sub(pattern, f'<span class="attribute">{location}</span>', result, flags=re.IGNORECASE)
         
         return result
+
+    def _extract_math_expression(self, query: str) -> Optional[str]:
+        """Extract a math expression (basic arithmetic) from the query.
+
+        Supports digits, + - * / ( ), decimal points and common words (plus, minus, times, divided by).
+        Returns a sanitized expression string safe for eval with restricted context, or None.
+        """
+        self._add_thought("Looking for math expression", None)
+        word_map = {
+            r"\bplus\b": "+",
+            r"\bminus\b": "-",
+            r"\btimes\b": "*",
+            r"\bmultiplied by\b": "*",
+            r"\bdivided by\b": "/",
+            r"\bover\b": "/",
+        }
+        normalized = query.lower()
+        for pattern, repl in word_map.items():
+            normalized = re.sub(pattern, repl, normalized)
+        match = re.findall(r"[0-9()+\-*/. ]", normalized)
+        if not match:
+            self._add_thought("No math characters found", None)
+            return None
+        candidate = "".join(match)
+        candidate = re.sub(r"\s+", " ", candidate).strip()
+        if not re.search(r"[+\-*/]", candidate):
+            self._add_thought("Expression lacks operators", candidate)
+            return None
+        if re.search(r"[^0-9()+\-*/. ]", candidate):
+            self._add_thought("Disallowed characters in expression", candidate)
+            return None
+        self._add_thought("Extracted math expression", candidate)
+        return candidate
+
+    def _extract_search_query(self, query: str) -> Optional[str]:
+        """Extract a search query by trimming leading indicator phrases and filler words."""
+        self._add_thought("Extracting search query", None)
+        q = query.strip()
+        lowered = q.lower()
+        # Remove punctuation at ends
+        lowered = lowered.strip("?!. ")
+        # Remove leading activation phrases
+        patterns = [
+            r"^(search for|search|look up|find|tell me about|what is|who is|where is|when is)\s+",
+        ]
+        modified = lowered
+        for pat in patterns:
+            modified = re.sub(pat, "", modified)
+        modified = modified.strip()
+        if not modified or modified == lowered:
+            # fallback: if original contains 'search for', take substring after it
+            for key in ["search for", "search", "look up", "find", "tell me about"]:
+                if key in lowered:
+                    idx = lowered.find(key) + len(key)
+                    modified = lowered[idx:].strip()
+                    break
+        if modified:
+            self._add_thought("Derived search query", modified)
+            return modified
+        self._add_thought("No search query extracted", None)
+        return None
 
     def process_query(self, query: str, user_timezone: str = DEFAULT_TIMEZONE) -> Tuple[str, List[ThoughtStep], str]:
         """Process user query and return response, thoughts, and highlighted query"""
@@ -938,16 +904,9 @@ class SemanticParser:
         if math_expression or query_type == "calculator_query" or "calculate" in query_lower or "compute" in query_lower or "solve" in query_lower:
             tools.add("calculator")
             self._add_thought("Inferred calculator tool from query", math_expression)
-        
-        spotted_music_terms = any(term in query.lower() for term in ["spotify", "music", "song", "track", "play", "pause", "skip"])
-        spotify_action = None
-        
-        if spotted_music_terms:
-            spotify_action = self._extract_spotify_action(query)
-            if spotify_action:
-                self._add_thought("Found explicit Spotify action", spotify_action)
-                tools.add("spotify")
-        
+
+        # Music/Spotify detection removed.
+
         if not tools:
             self._add_thought("No explicit tools found, inferring from context", None)
             if query_type == "time_query" or "time" in query.lower():
@@ -962,45 +921,45 @@ class SemanticParser:
             elif "day" in query.lower():
                 tools.add("day")
                 self._add_thought("Inferred tool from context", "day")
-            elif spotted_music_terms:
-                tools.add("spotify")
-                self._add_thought("Inferred tool from context", "spotify")
-        
+
+        # Home Assistant natural language detection (verbs + domains)
+        ha_action_pattern = r"\b(turn on|turn off|switch on|switch off|activate|run|start|stop)\b"
+        ha_domain_pattern = r"\b(light|lights|fan|fans|switch|switches|scene|scenes|script|scripts)\b"
+        if (re.search(ha_action_pattern, query_lower) and re.search(ha_domain_pattern, query_lower)) and "homeassistant" not in tools:
+            tools.add("homeassistant")
+            entities["search_query"] = query  # pass full query for downstream parsing
+            self._add_thought("Inferred Home Assistant tool from verbs/domains", None)
+
         entities = self._extract_entities(query, tools)
         extracted_location = entities.get("location")
-        
+
         entities["user_timezone"] = user_timezone
-        
+
         # Add search query for calculator
         if "calculator" in tools or "calc" in tools:
             entities["search_query"] = query
-        
-        if "spotify" in tools or "music" in tools:
-            if spotify_action:
-                entities["spotify_action"] = spotify_action
-                self._add_thought("Added spotify action to entities", spotify_action)
-        
+
+        # Removed spotify entity injection.
+
         use_search = False
-        if len(tools) == 0 and not spotify_action:
+        if len(tools) == 0:
             use_search = True
-        elif len(tools) == 1 and ("spotify" in tools or "music" in tools) and not spotify_action:
-            use_search = True
-            
+
         if "search" in tools and len(tools) > 1:
             tools.remove("search")
             self._add_thought("Removed search tool as other tools are available", list(tools))
-        
+
         if use_search:
             self._add_thought("No specific actions found, using search as fallback", None)
             search_terms = query.lower()
             for indicator in ["search", "find", "show", "get", "look up", "tell me about", "what is", "who is", "where is"]:
                 search_terms = search_terms.replace(indicator, "").strip()
             if search_terms:
-                if len(tools) == 0 or (len(tools) == 1 and ("spotify" in tools or "music" in tools) and not spotify_action):
+                if len(tools) == 0:
                     tools.add("search")
                     entities["search_query"] = search_terms
                     self._add_thought("Inferred search tool", {"terms": search_terms})
-        
+
         if tools:
             self._add_thought("Preparing to execute tools", list(tools))
             responses = []
@@ -1009,20 +968,20 @@ class SemanticParser:
                     tool_fn = self.known_tools[tool]
                     response = tool_fn(entities)
                     responses.append(response)
-            
+
             if responses:
                 final_response = " ".join(responses)
             else:
                 final_response = "I understood your query but couldn't find the right tool to help."
         else:
             final_response = "I'm sorry, I don't understand what you're asking for."
-        
+
         if contains_greeting and not greeting_only:
             import random
             greeting_response = random.choice(self.greeting_responses) + " "
             final_response = greeting_response + final_response
             self._add_thought("Added greeting to response", greeting_response)
-        
+
         self._add_thought("Generated final response", final_response)
         return final_response, self.thoughts, extracted_location
 
@@ -1131,164 +1090,127 @@ class SemanticParser:
                 "error": "Search failed"
             })
 
-    def _extract_spotify_action(self, query: str) -> Optional[str]:
-        """Extract Spotify action from query"""
-        self._add_thought("Looking for Spotify action in query", None)
-        
-        query_lower = query.lower()
-        
-        if re.search(r"\b(play|resume)\b", query_lower) and not re.search(r"\b(playing|what's playing)\b", query_lower):
-            self._add_thought("Found Spotify action", "play")
-            return "play"
-        
-        if re.search(r"\b(pause|stop)\b", query_lower):
-            self._add_thought("Found Spotify action", "pause")
-            return "pause"
-        
-        if re.search(r"\b(next|skip|forward)\b", query_lower):
-            self._add_thought("Found Spotify action", "next")
-            return "next"
-        
-        if re.search(r"\b(previous|back|earlier|last|before)\b", query_lower):
-            self._add_thought("Found Spotify action", "previous")
-            return "previous"
-        
-        if re.search(r"\b(what'?s playing|current|now playing|what song|track|playing now)\b", query_lower):
-            self._add_thought("Found Spotify action", "now_playing")
-            return "now_playing"
-        
-        self._add_thought("No explicit Spotify action found", None)
-        return None
-        
-    def _spotify_tool(self, entities: Dict[str, Any]) -> str:
-        """Handle Spotify music controls and queries"""
-        self._add_thought("Executing Spotify tool", None)
-        
+    # Removed Spotify action extraction & tool.
+
+    def _home_assistant_tool(self, entities: Dict[str, Any]) -> str:
+        """Execute simple Home Assistant device commands based on the natural language query.
+
+        Supports turning on/off lights, fans, switches, activating scenes/scripts.
+        Relies on a previously linked Home Assistant instance via REST API.
+        """
+        self._add_thought("Executing Home Assistant tool", None)
         if not current_user.is_authenticated:
-            self._add_thought("User not authenticated", None)
-            return "You need to login to use Spotify integration. Go to Settings and sign in."
-        
-        spotify_action = entities.get("spotify_action")
-        if not spotify_action:
-            spotify_action = self._extract_spotify_action(entities.get("search_query", ""))
-        
-        self._add_thought("Spotify action", spotify_action)
-        
+            return "You need to login and link Home Assistant first."
+        # Fetch link
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM spotify_tokens WHERE user_id = ?", (current_user.id,))
-            token_data = cursor.fetchone()
-        
-        if not token_data:
-            self._add_thought("Spotify not connected", None)
-            return "You haven't connected your Spotify account yet. Go to Settings > Integrations to connect Spotify."
-        
-        spotify = get_spotify_client(current_user.id)
-        if not spotify:
-            self._add_thought("Failed to get Spotify client", None)
-            return "There was an error connecting to Spotify. Please try reconnecting your account."
-        
+            cursor.execute('SELECT base_url, access_token FROM home_assistant_links WHERE user_id = ?', (current_user.id,))
+            row = cursor.fetchone()
+        if not row:
+            return "You haven't linked Home Assistant yet. Go to Integrations to connect it."
+        base_url = row['base_url']
+        def _decrypt(val):
+            if not val:
+                return None
+            try:
+                return decrypt_token(val)
+            except Exception:
+                return val
+        access_token = _decrypt(row['access_token'])
+        query = entities.get("search_query") or ""
+        ql = query.lower()
+        refresh_token = _decrypt(row['refresh_token'])
+        expires_at = row['expires_at'] or 0
+        now_ts = int(time.time())
+        if expires_at and expires_at < now_ts - 30 and refresh_token:
+            self._add_thought("Access token expired, attempting refresh", expires_at)
+            try:
+                token_resp = requests.post(f"{base_url}/auth/token", data={
+                    'grant_type': 'refresh_token',
+                    'refresh_token': refresh_token,
+                    'client_id': url_for('ha_callback', _external=True)
+                }, timeout=10)
+                if token_resp.status_code == 200:
+                    td = token_resp.json()
+                    access_token = td.get('access_token', access_token)
+                    new_expires = int(time.time()) + int(td.get('expires_in', 1800))
+                    with get_db_connection() as conn:
+                        c2 = conn.cursor()
+                        c2.execute('UPDATE home_assistant_links SET access_token = ?, expires_at = ? WHERE user_id = ?', (encrypt_token(access_token), new_expires, current_user.id))
+                        conn.commit()
+                else:
+                    self._add_thought("Refresh failed", token_resp.text[:120])
+            except Exception as e:
+                self._add_thought("Refresh exception", str(e))
+        # Determine action
+        action = None
+        if re.search(r"\b(turn on|switch on|activate|start|run)\b", ql):
+            action = 'turn_on'
+        elif re.search(r"\b(turn off|switch off|deactivate|stop)\b", ql):
+            action = 'turn_off'
+        # Determine domain
+        domain = None
+        if re.search(r"\blight(s)?\b", ql):
+            domain = 'light'
+        elif re.search(r"\bfan(s)?\b", ql):
+            domain = 'fan'
+        elif re.search(r"\bswitch(es)?\b", ql):
+            domain = 'switch'
+        elif re.search(r"\bscene(s)?\b", ql):
+            domain = 'scene'; action = 'turn_on'
+        elif re.search(r"\bscript(s)?\b", ql):
+            domain = 'script'; action = 'turn_on'
+        if not domain:
+            return "I couldn't determine what device you want to control. Try 'turn on the bedroom lights'."
+        # Extract room name (simple heuristic: words before device keyword)
+        room_match = re.search(r"\b(?:my|the)?\s*([a-zA-Z ]+?)\s+(?:light|lights|fan|fans|switch|switches)\b", ql)
+        room = None
+        if room_match:
+            candidate = room_match.group(1).strip()
+            if candidate and len(candidate.split()) <= 3 and not re.search(r"turn|on|off|activate|run|switch", candidate):
+                room = candidate
+        # Fetch states from Home Assistant
         try:
-            if spotify_action == "now_playing":
-                self._add_thought("Getting currently playing track", None)
-                current_playback = spotify.current_playback()
-                
-                if not current_playback or not current_playback.get('item'):
-                    self._add_thought("No active playback", None)
-                    return "There's nothing playing on Spotify right now."
-                
-                track = current_playback['item']
-                artists = ", ".join(artist['name'] for artist in track['artists'])
-                is_playing = current_playback['is_playing']
-                device_name = current_playback.get('device', {}).get('name', 'your device')
-                album_art = track['album']['images'][0]['url'] if track['album']['images'] else None
-                track_url = track['external_urls']['spotify'] if 'external_urls' in track else None
-                
-                status = "playing" if is_playing else "paused"
-                self._add_thought("Current track info", {"track": track['name'], "artist": artists, "status": status})
-                
-                return json.dumps({
-                    "type": "spotify_track",
-                    "track_name": track['name'],
-                    "artist": artists,
-                    "album_art": album_art,
-                    "track_url": track_url,
-                    "is_playing": is_playing,
-                    "device": device_name
-                })
-                
-            elif spotify_action == "play":
-                self._add_thought("Starting playback", None)
-                spotify.start_playback()
-                return "Playing music on Spotify."
-                
-            elif spotify_action == "pause":
-                self._add_thought("Pausing playback", None)
-                spotify.pause_playback()
-                return "Paused Spotify playback."
-                
-            elif spotify_action == "next":
-                self._add_thought("Skipping to next track", None)
-                spotify.next_track()
-                
-                time.sleep(1)
-                current = spotify.current_playback()
-                if current and current.get('item'):
-                    track = current['item']
-                    artists = ", ".join(artist['name'] for artist in track['artists'])
-                    album_art = track['album']['images'][0]['url'] if track['album']['images'] else None
-                    track_url = track['external_urls']['spotify'] if 'external_urls' in track else None
-                    
-                    return json.dumps({
-                        "type": "spotify_track",
-                        "track_name": track['name'],
-                        "artist": artists,
-                        "album_art": album_art,
-                        "track_url": track_url,
-                        "is_playing": current.get('is_playing', True),
-                        "device": current.get('device', {}).get('name', 'your device')
-                    })
-                else:
-                    return "Skipped to the next track."
-                
-            elif spotify_action == "previous":
-                self._add_thought("Going to previous track", None)
-                spotify.previous_track()
-                
-                time.sleep(1) 
-                current = spotify.current_playback()
-                if current and current.get('item'):
-                    track = current['item']
-                    artists = ", ".join(artist['name'] for artist in track['artists'])
-                    album_art = track['album']['images'][0]['url'] if track['album']['images'] else None
-                    track_url = track['external_urls']['spotify'] if 'external_urls' in track else None
-                    
-                    return json.dumps({
-                        "type": "spotify_track",
-                        "track_name": track['name'],
-                        "artist": artists,
-                        "album_art": album_art,
-                        "track_url": track_url,
-                        "is_playing": current.get('is_playing', True),
-                        "device": current.get('device', {}).get('name', 'your device')
-                    })
-                else:
-                    return "Went to the previous track."
-            
-            else:
-                self._add_thought("Unknown Spotify action", spotify_action)
-                return "I'm not sure what you want to do with Spotify. You can ask me to play, pause, skip to next/previous track, or check what's playing."
-                
+            resp = requests.get(f"{base_url}/api/states", headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}, timeout=5)
+            if resp.status_code != 200:
+                return f"Failed to reach Home Assistant ({resp.status_code})."
+            states = resp.json()
         except Exception as e:
-            error_msg = str(e)
-            self._add_thought("Error with Spotify API", error_msg)
-            
-            if "No active device found" in error_msg:
-                return "I couldn't find an active Spotify device. Please make sure Spotify is open on one of your devices."
-            elif "Premium required" in error_msg:
-                return "This action requires a Spotify Premium subscription."
+            return f"Error contacting Home Assistant: {e}"
+        # Find target entity
+        target_entity = None
+        friendly = None
+        for st in states:
+            entity_id = st.get('entity_id','')
+            if not entity_id.startswith(domain + "."):
+                continue
+            attrs = st.get('attributes', {})
+            fname = attrs.get('friendly_name','')
+            if room:
+                if room.lower() in fname.lower():
+                    target_entity = entity_id
+                    friendly = fname
+                    break
             else:
-                return f"There was an error controlling Spotify: {error_msg}"
+                target_entity = entity_id
+                friendly = fname
+                break
+        if not target_entity:
+            return "I couldn't find a matching device in Home Assistant."
+        if not action:
+            return f"I found {friendly or target_entity} but need to know if you want it on or off."
+        # Call service
+        service_domain = domain
+        service = action
+        try:
+            svc_resp = requests.post(f"{base_url}/api/services/{service_domain}/{service}", headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}, json={"entity_id": target_entity}, timeout=5)
+            if svc_resp.status_code in (200, 201):
+                state_word = "on" if action == 'turn_on' else 'off'
+                return f"Set {friendly or target_entity} {state_word}."
+            else:
+                return f"Service call failed ({svc_resp.status_code})."
+        except Exception as e:
+            return f"Error calling service: {e}"
 
     def _calculator_tool(self, entities: Dict[str, Any]) -> str:
         """Perform a calculation based on the query"""
@@ -1324,150 +1246,9 @@ class SemanticParser:
                 return f"The result of {math_expression} is {result}."
             else:
                 return f"The result of {math_expression} is {result:.4f}."
-                
         except Exception as e:
-            self._add_thought("Error performing calculation", str(e))
-            return f"There was an error calculating '{math_expression}'. Please check the expression and try again."
-
-    def _extract_math_expression(self, query: str) -> Optional[str]:
-        """Extract mathematical expression from query"""
-        self._add_thought("Looking for mathematical expression in query", None)
-        
-        # Remove words like "calculate" or "what is" to clean the query
-        cleaned_query = query.lower()
-        for prefix in ["calculate", "compute", "what is", "what's", "solve", "result of", "value of"]:
-            cleaned_query = re.sub(fr'\b{prefix}\b', '', cleaned_query)
-        
-        cleaned_query = cleaned_query.strip()
-        self._add_thought("Cleaned query", cleaned_query)
-        
-        # Try to find complex expressions with parentheses and multiple operations first
-        complex_pattern = r'(\([\d\s+\-*/().]+\)|[\d\s+\-*/().]+)'
-        complex_match = re.search(complex_pattern, cleaned_query)
-        
-        # Match patterns with text representations of operators
-        text_pattern = r'(\d+(\.\d+)?)\s*(plus|minus|times|multiplied by|divided by)\s*(\d+(\.\d+)?)'
-        text_match = re.search(text_pattern, cleaned_query)
-        
-        # Match patterns with symbol operators
-        symbol_pattern = r'(\d+(\.\d+)?)\s*([-+*/])\s*(\d+(\.\d+)?)'
-        symbol_match = re.search(symbol_pattern, cleaned_query)
-        
-        if complex_match:
-            expr = complex_match.group(0)
-            # Check if it's actually a math expression with at least one operator
-            if re.search(r'[-+*/()]', expr):
-                self._add_thought("Found complex mathematical expression", expr)
-                return expr
-        
-        if text_match:
-            self._add_thought("Found text mathematical expression", text_match.group(0))
-            return text_match.group(0)
-        elif symbol_match:
-            self._add_thought("Found symbol mathematical expression", symbol_match.group(0))
-            return symbol_match.group(0)        
-        self._add_thought("No mathematical expression found", None)
-        return None
-
-    def _extract_search_query(self, query: str) -> Optional[str]:
-        """Extract search terms from query by removing search indicators"""
-        self._add_thought("Looking for search terms in query", None)
-        
-        search_terms = query.lower()
-        
-        # Remove common search indicators
-        search_indicators = [
-            "search for", "search", "find", "look up", "show me", "get", 
-            "tell me about", "what is", "who is", "where is", "how is"
-        ]
-        
-        for indicator in search_indicators:
-            search_terms = search_terms.replace(indicator, "").strip()
-        
-        # Clean up extra whitespace
-        search_terms = " ".join(search_terms.split())
-        
-        if search_terms:
-            self._add_thought("Extracted search terms", search_terms)
-            return search_terms
-        
-        self._add_thought("No search terms found after removing indicators", None)
-        return None
-
-class SpotifyService:
-    """Service to handle Spotify-related functionality"""
-    
-    def __init__(self):
-        pass
-        
-    def get_current_track(self, user_id):
-        """Get information about the currently playing track"""
-        spotify = get_spotify_client(user_id)
-        if not spotify:
-            return None
-            
-        try:
-            current_playback = spotify.current_playback()
-            if not current_playback or not current_playback.get('item'):
-                return None
-                
-            track = current_playback['item']
-            artists = ", ".join(artist['name'] for artist in track['artists'])
-            is_playing = current_playback['is_playing']
-            device_name = current_playback.get('device', {}).get('name', 'Unknown device')
-            
-            album_art = None
-            if track.get('album') and track['album'].get('images') and len(track['album']['images']) > 0:
-                album_art = track['album']['images'][0]['url']
-                
-            track_url = None
-            if track.get('external_urls') and track['external_urls'].get('spotify'):
-                track_url = track['external_urls']['spotify']
-                
-            return {
-                "track_name": track['name'],
-                "artist": artists,
-                "album_art": album_art,
-                "track_url": track_url,
-                "is_playing": is_playing,
-                "device": device_name
-            }
-        except Exception as e:
-            app.logger.error(f"Error getting current track: {str(e)}")
-            return None
-            
-    def control_playback(self, user_id, action):
-        """Control Spotify playback"""
-        spotify = get_spotify_client(user_id)
-        if not spotify:
-            return False, "Spotify not connected"
-            
-        try:
-            if action == "play":
-                spotify.start_playback()
-                return True, "Playback started"
-            elif action == "pause":
-                spotify.pause_playback()
-                return True, "Playback paused"
-            elif action == "next":
-                spotify.next_track()
-                return True, "Skipped to next track"
-            elif action == "previous":
-                spotify.previous_track()
-                return True, "Skipped to previous track"
-            else:
-                return False, f"Unknown action: {action}"
-        except Exception as e:
-            return False, str(e)
-
-_spotify_service = None
-
-def get_spotify_service():
-    """Get the singleton instance of SpotifyService"""
-    global _spotify_service
-    if _spotify_service is None:
-        _spotify_service = SpotifyService()
-    return _spotify_service
+            self._add_thought("Calculation error", str(e))
+            return "There was an error evaluating that expression. Please check the syntax."
 
 app = Flask(__name__, static_folder='static', template_folder='static')
 app.secret_key = SECRET_KEY
@@ -1506,16 +1287,7 @@ oauth.register(
     client_kwargs={'scope': 'user:email'},
 )
 
-oauth.register(
-    name='JoshAtticusID',
-    client_id=JOSHATTICUS_CLIENT_ID,
-    client_secret=JOSHATTICUS_CLIENT_SECRET,
-    authorize_url='https://id.joshattic.us/oauth/authorize',
-    access_token_url='https://id.joshattic.us/oauth/token',
-    api_base_url='https://id.joshattic.us/',
-    userinfo_endpoint='oauth/userinfo',
-    client_kwargs={'scope': 'name email profile_picture'},
-)
+# JoshAtticusID oauth registration removed (and related routes pruned)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -1535,41 +1307,8 @@ def get_client_ip():
     return ip
 
 def migrate_existing_tokens():
-    """Migrate existing plaintext tokens to encrypted format"""
-    print("Checking for tokens that need encryption...")
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT user_id, access_token, refresh_token FROM spotify_tokens")
-        tokens = cursor.fetchall()
-        
-        updated_count = 0
-        for token in tokens:
-            user_id = token['user_id']
-            access_token = token['access_token']
-            refresh_token = token['refresh_token']
-            
-            try:
-                decrypt_token(access_token)
-            except:
-                print(f"Encrypting tokens for user {user_id}")
-                encrypted_access = encrypt_token(access_token)
-                encrypted_refresh = encrypt_token(refresh_token)
-                
-                cursor.execute(
-                    """
-                    UPDATE spotify_tokens 
-                    SET access_token = ?, refresh_token = ?
-                    WHERE user_id = ?
-                    """,
-                    (encrypted_access, encrypted_refresh, user_id)
-                )
-                updated_count += 1
-                
-        conn.commit()
-        if updated_count > 0:
-            print(f"Successfully encrypted {updated_count} tokens")
-        else:
-            print("No tokens needed encryption")
+    """Legacy function (Spotify removed). No action required."""
+    return
 
 
 def get_user_id_from_token(auth_header: Optional[str]) -> Optional[str]:
@@ -1722,15 +1461,7 @@ def login_app_github():
     redirect_uri = url_for('auth_app_github_callback', _external=True)
     return oauth.github.authorize_redirect(redirect_uri, state=state)
 
-@app.route('/login/app/JoshAtticusID')
-def login_app_JoshAtticusID():
-    """Login with JoshAtticusID OAuth for app"""
-    state = session.get('app_oauth_state')
-    if not state:
-        return "Invalid state, please start the login process again.", 400
-
-    redirect_uri = url_for('auth_app_JoshAtticusID_callback', _external=True)
-    return oauth.JoshAtticusID.authorize_redirect(redirect_uri, state=state)
+## JoshAtticusID app login removed
 
 @app.route('/auth/app/google/callback')
 def auth_app_google_callback():
@@ -1812,44 +1543,7 @@ def auth_app_github_callback():
     app_token = generate_app_token(user_id)
     return redirect(callback_url.replace('[TOKEN]', app_token))
 
-@app.route('/auth/app/JoshAtticusID/callback')
-def auth_app_JoshAtticusID_callback():
-    """Handle JoshAtticusID OAuth callback for app"""
-    state = session.pop('app_oauth_state', None)
-    callback_state = request.args.get('state')
-
-    if not state or state != callback_state:
-        return "Invalid authentication state. Please try again.", 403
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT callback_url FROM app_auth_requests WHERE state = ?", (state,))
-        auth_request = cursor.fetchone()
-        if not auth_request:
-            return "Invalid authentication request.", 403
-        callback_url = auth_request['callback_url']
-        cursor.execute("DELETE FROM app_auth_requests WHERE state = ?", (state,))
-        conn.commit()
-
-    token = oauth.JoshAtticusID.authorize_access_token()
-    resp = oauth.JoshAtticusID.get('oauth/userinfo', token=token)
-    user_info = resp.json()
-    
-    # NOTE: Assumes the userinfo response has a 'sub' field for the user ID.
-    user_id = f"JoshAtticusID_{user_info['sub']}"
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-        if not cursor.fetchone():
-            cursor.execute(
-                "INSERT INTO users (id, name, email, provider, profile_pic) VALUES (?, ?, ?, ?, ?)",
-                (user_id, user_info.get('name'), user_info.get('email'), 'JoshAtticusID', user_info.get('profile_picture'))
-            )
-            conn.commit()
-
-    app_token = generate_app_token(user_id)
-    return redirect(callback_url.replace('[TOKEN]', app_token))
+## JoshAtticusID app callback removed
 
 def generate_app_token(user_id):
     """Generate and store a new app token for a user"""
@@ -1872,14 +1566,7 @@ def login_google():
     redirect_uri = url_for('auth_google', _external=True)
     return oauth.google.authorize_redirect(redirect_uri, state=state)
 
-@app.route('/login/JoshAtticusID')
-def login_JoshAtticusID():
-    """Login with JoshAtticusID OAuth"""
-    state = secrets.token_urlsafe(16)
-    session['oauth_state'] = state
-    
-    redirect_uri = url_for('auth_JoshAtticusID', _external=True)
-    return oauth.JoshAtticusID.authorize_redirect(redirect_uri, state=state)
+## JoshAtticusID login removed
 
 @app.route('/auth/google')
 def auth_google():
@@ -1921,46 +1608,7 @@ def auth_google():
     
     return redirect('/')
 
-@app.route('/auth/JoshAtticusID')
-def auth_JoshAtticusID():
-    """Handle JoshAtticusID OAuth callback"""
-    expected_state = session.pop('oauth_state', None)
-    callback_state = request.args.get('state')
-    
-    if not expected_state or callback_state != expected_state:
-        return f"Invalid authentication state. Please try again. State: {callback_state} Expected State: {expected_state}", 403
-    
-    token = oauth.JoshAtticusID.authorize_access_token()
-    
-    resp = oauth.JoshAtticusID.get('oauth/userinfo', token=token)
-    user_info = resp.json()
-    
-    # NOTE: Assumes the userinfo response has a 'sub' field for the user ID.
-    user_id = f"JoshAtticusID_{user_info['sub']}"
-    
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-        existing_user = cursor.fetchone()
-        
-        if not existing_user:
-            cursor.execute(
-                "INSERT INTO users (id, name, email, provider, profile_pic) VALUES (?, ?, ?, ?, ?)",
-                (user_id, user_info.get('name'), user_info.get('email'), 'JoshAtticusID', user_info.get('profile_picture'))
-            )
-            conn.commit()
-    
-    user = User(
-        id=user_id,
-        name=user_info.get('name'),
-        email=user_info.get('email'),
-        provider='JoshAtticusID',
-        profile_pic=user_info.get('profile_picture')
-    )
-    login_user(user)
-    
-    return redirect('/')
+## JoshAtticusID auth callback removed
 
 @app.route('/login/github')
 def login_github():
@@ -2015,75 +1663,7 @@ def auth_github():
     
     return redirect('/')
 
-@app.route('/login/spotify')
-def login_spotify():
-    """Initiate Spotify OAuth flow"""
-    if not current_user.is_authenticated:
-        return redirect('/login')
-    
-    if 'spotify_auth_attempts' not in session:
-        session['spotify_auth_attempts'] = 0
-    
-    if session['spotify_auth_attempts'] > 2:
-        session.pop('spotify_auth_attempts', None)
-        return "Too many redirect attempts. Please try again later."
-    
-    session['spotify_auth_attempts'] = session['spotify_auth_attempts'] + 1
-    
-    state = secrets.token_urlsafe(16)
-    session['spotify_oauth_state'] = state
-    
-    cache_handler = DatabaseCacheHandler(current_user.id)
-    
-    auth_manager = SpotifyOAuth(
-        client_id=SPOTIFY_CLIENT_ID,
-        client_secret=SPOTIFY_CLIENT_SECRET,
-        redirect_uri=SPOTIFY_REDIRECT_URI,
-        scope=' '.join(SPOTIFY_SCOPES),
-        cache_handler=cache_handler,
-        show_dialog=True,
-        state=state
-    )
-    
-    auth_url = auth_manager.get_authorize_url()
-    return redirect(auth_url)
-
-@app.route('/auth/spotify/callback')
-def auth_spotify_callback():
-    """Handle Spotify OAuth callback"""
-    if not current_user.is_authenticated:
-        return redirect('/login')
-
-    session.pop('spotify_auth_attempts', None)
-    
-    expected_state = session.pop('spotify_oauth_state', None)
-    callback_state = request.args.get('state')
-    
-    if not expected_state or callback_state != expected_state:
-        return "Invalid authentication state. Please try again.", 403
-    
-    code = request.args.get('code')
-    if not code:
-        error = request.args.get('error')
-        if error:
-            return f"Authorization failed: {error}"
-        return redirect('/')
-    
-    cache_handler = DatabaseCacheHandler(current_user.id)
-    
-    auth_manager = SpotifyOAuth(
-        client_id=SPOTIFY_CLIENT_ID,
-        client_secret=SPOTIFY_CLIENT_SECRET,
-        redirect_uri=SPOTIFY_REDIRECT_URI,
-        scope=' '.join(SPOTIFY_SCOPES),
-        cache_handler=cache_handler
-    )
-    
-    try:
-        token_info = auth_manager.get_access_token(code, check_cache=False)
-        return redirect('/integrations')
-    except Exception as e:
-        return f"Error authenticating with Spotify: {str(e)}"
+## Spotify login & callback removed (legacy)
 
 @app.route('/integrations')
 @login_required
@@ -2091,121 +1671,98 @@ def integrations_page():
     """Show integrations management page"""
     return send_from_directory('static', 'integrations.html')
 
-@app.route('/api/integrations/spotify/status', methods=['GET'])
-def spotify_integration_status():
-    """Check if user has linked their Spotify account"""
-    if not current_user.is_authenticated:
-        return jsonify({"linked": False, "message": "You need to login first"})
-    
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT * FROM spotify_tokens WHERE user_id = ?", (current_user.id,))
-        token_data = cursor.fetchone()
-    
-    if token_data:
-        spotify = get_spotify_client(current_user.id)
-        try:
-            current_playback = spotify.current_playback()
-            if current_playback:
-                return jsonify({
-                    "linked": True,
-                    "active": True,
-                    "message": "Spotify connected and active"
-                })
-            else:
-                return jsonify({
-                    "linked": True,
-                    "active": False,
-
-                    "message": "Spotify connected, but no active playback detected"
-                })
-        except:
-            return jsonify({
-                "linked": True,
-                "active": False,
-                "message": "Spotify connected, but there was an error checking playback"
-            })
-    
-    return jsonify({
-        "linked": False,
-        "message": "Spotify not connected"
-    })
-
-@app.route('/api/integrations/spotify/disconnect', methods=['POST'])
+@app.route('/home-assistant-setup.html')
 @login_required
-def spotify_disconnect():
-    """Disconnect Spotify integration"""
+def ha_setup_page():
+    return send_from_directory('static', 'home-assistant-setup.html')
+
+## All Spotify endpoints removed
+
+# -------- Home Assistant Integration (OAuth Auth API) --------
+@app.route('/api/integrations/home-assistant/start', methods=['POST'])
+@login_required
+def ha_start():
+    data = request.json or {}
+    base_url = data.get('base_url', '').strip().rstrip('/')
+    if not base_url:
+        return jsonify({"success": False, "message": "base_url required"}), 400
+    if not base_url.startswith(('http://', 'https://')):
+        return jsonify({"success": False, "message": "base_url must start with http:// or https://"}), 400
+    state = secrets.token_hex(16)
+    session['ha_state'] = state
+    session['ha_base_url'] = base_url
+    callback_url = url_for('ha_callback', _external=True)
+    client_id = callback_url  # HA expects redirect URL as client_id
+    authorize_url = (
+        f"{base_url}/auth/authorize?response_type=code&client_id="
+        f"{requests.utils.quote(client_id, safe='')}"
+        f"&redirect_uri={requests.utils.quote(callback_url, safe='')}"
+        f"&state={state}"
+    )
+    return jsonify({"success": True, "authorize_url": authorize_url})
+
+@app.route('/api/integrations/home-assistant/callback')
+@login_required
+def ha_callback():
+    state = request.args.get('state')
+    code = request.args.get('code')
+    error = request.args.get('error')
+    expected = session.get('ha_state')
+    base_url = session.get('ha_base_url')
+    if error:
+        return redirect(url_for('integrations_page') + f"?ha_error={requests.utils.quote(error)}")
+    if not state or state != expected or not base_url:
+        return "Invalid state", 400
+    if not code:
+        return "Missing code", 400
+    token_url = f"{base_url}/auth/token"
+    payload = {
+        'grant_type': 'authorization_code',
+        'code': code,
+        'client_id': url_for('ha_callback', _external=True)
+    }
+    try:
+        r = requests.post(token_url, data=payload, timeout=15)
+    except Exception as e:
+        return f"Token request failed: {e}", 502
+    if r.status_code != 200:
+        return f"Token exchange failed ({r.status_code}): {r.text[:200]}", 502
+    data = r.json()
+    access_token = data.get('access_token')
+    refresh_token = data.get('refresh_token')
+    expires_in = data.get('expires_in', 1800)
+    if not access_token:
+        return "No access token", 502
+    expires_at = int(time.time()) + int(expires_in)
     with get_db_connection() as conn:
-        cursor = conn.cursor()
-        
-        cursor.execute("DELETE FROM spotify_tokens WHERE user_id = ?", (current_user.id,))
+        c = conn.cursor()
+        c.execute('''INSERT OR REPLACE INTO home_assistant_links (user_id, base_url, access_token, refresh_token, expires_at, created_at) VALUES (?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM home_assistant_links WHERE user_id = ?), ?))''',
+                  (current_user.id, base_url, encrypt_token(access_token), encrypt_token(refresh_token) if refresh_token else None, expires_at, current_user.id, datetime.now()))
         conn.commit()
-    
-    return jsonify({"success": True, "message": "Spotify disconnected successfully"})
+    session.pop('ha_state', None)
+    session.pop('ha_base_url', None)
+    return redirect(url_for('integrations_page') + "?ha_link=1")
 
-
-
-@app.route('/api/integrations/spotify/now-playing')
-def spotify_now_playing():
-    if not current_user.is_authenticated:
-        return jsonify({"error": "Not authenticated"}), 401
-    
-    user_id = current_user.id
-    
-    spotify_service = get_spotify_service()
-    if not spotify_service:
-        return jsonify({"error": "Spotify service not available"}), 500
-    
-    try:
-        current_track = spotify_service.get_current_track(user_id)
-        if not current_track:
-            return jsonify({"error": "No track playing"}), 404
-        
-        track_data = {
-            "track_name": current_track.get("track_name", "Unknown"),
-            "artist": current_track.get("artist", "Unknown"),
-            "album_art": current_track.get("album_art"),
-            "track_url": current_track.get("track_url", "https://open.spotify.com/"),
-            "is_playing": current_track.get("is_playing", False),
-            "device": current_track.get("device")
-        }
-        
-        return jsonify(track_data)
-    except Exception as e:
-        app.logger.error(f"Error getting current track: {str(e)}")
-        return jsonify({"error": f"Failed to get current track: {str(e)}"}), 500
-
-@app.route('/api/integrations/spotify/control', methods=['POST'])
+@app.route('/api/integrations/home-assistant/status', methods=['GET'])
 @login_required
-def spotify_control():
-    """Control Spotify playback"""
-    action = request.json.get('action')
-    
-    if not action:
-        return jsonify({"error": "No action specified"}), 400
-    
-    spotify = get_spotify_client(current_user.id)
-    if not spotify:
-        return jsonify({"error": "Spotify not connected"}), 404
-    
-    try:
-        if action == "play":
-            spotify.start_playback()
-            return jsonify({"success": True, "message": "Playback started"})
-        elif action == "pause":
-            spotify.pause_playback()
-            return jsonify({"success": True, "message": "Playback paused"})
-        elif action == "next":
-            spotify.next_track()
-            return jsonify({"success": True, "message": "Skipped to next track"})
-        elif action == "previous":
-            spotify.previous_track()
-            return jsonify({"success": True, "message": "Skipped to previous track"})
-        else:
-            return jsonify({"error": f"Unknown action: {action}"}), 400
-    except Exception as e:
-        return jsonify({"error": f"Error controlling playback: {str(e)}"}), 500
+def ha_status():
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT base_url, expires_at FROM home_assistant_links WHERE user_id = ?', (current_user.id,))
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"connected": False})
+        return jsonify({"connected": True, "base_url": row['base_url'], "expires_at": row['expires_at']})
+
+@app.route('/api/integrations/home-assistant/link', methods=['DELETE'])
+@login_required
+def ha_unlink():
+    with get_db_connection() as conn:
+        c = conn.cursor()
+        c.execute('DELETE FROM home_assistant_links WHERE user_id = ?', (current_user.id,))
+        conn.commit()
+    return jsonify({"success": True, "message": "Home Assistant disconnected"})
+
 
 @app.route('/logout')
 def logout():

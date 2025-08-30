@@ -139,14 +139,6 @@ neubot includes several built-in tools that can be triggered through natural lan
   - "find information about climate change"
   - "look up latest news"
 
-### spotify tool
-- **trigger words:** "spotify", "music", "play", "pause"
-- **functionality:** controls Spotify playback and gets track info
-- **example queries:**
-  - "what's playing on spotify?"
-  - "pause the music"
-  - "skip to next song"
-  - "play music"
 
 ## rate limiting
 
@@ -194,7 +186,7 @@ shows integrations management page (requires login)
 shows login page with OAuth options
 
 ## Authentication
-neubot supports OAuth2 authentication with Google and GitHub. Authentication is optional for basic functionality but required for Spotify integration and higher rate limits.
+neubot supports OAuth2 authentication with Google and GitHub. Authentication is optional for basic functionality but provides higher rate limits and enables account‑scoped integrations (e.g. Home Assistant).
 
 To make authenticated requests to the API, you need to include an `Authorization` header with your API token. The token should be included as a `Bearer` token.
 
@@ -216,6 +208,50 @@ curl -X GET https://neubot.joshatticus.site/api/limits \
 To authenticate users from your application, you can redirect them to the neubot login page with a special `callbackURL`. This URL must contain a parameter with the value `[TOKEN]`.
 
 After the user successfully authenticates, they will be redirected back to this URL, with `[TOKEN]` replaced by their API token.
+
+## Home Assistant Integration (Beta)
+
+Link a Home Assistant instance you control to issue natural‑language smart home commands through the chat interface.
+
+### `POST /api/integrations/home-assistant/start`
+Initiate the Home Assistant Auth API OAuth-like flow. Provide the root URL of your HA instance.
+
+Request JSON:
+```
+{ "base_url": "https://your-ha.example.com" }
+```
+Response:
+```
+{ "success": true, "authorize_url": "https://your-ha.example.com/auth/authorize?..." }
+```
+Open the returned `authorize_url` in a new browser tab/window while logged into Home Assistant, approve the consent screen, and you'll be redirected back to neubot which will exchange the code for tokens.
+
+Token handling:
+- Access & refresh tokens are stored encrypted (Fernet) with expiry (expires_at epoch seconds).
+- Tokens are refreshed automatically when expired.
+- Use HTTPS for your HA base URL whenever possible.
+
+### `GET /api/integrations/home-assistant/status`
+Returns whether the current user has a linked HA configuration.
+
+Success response example:
+```
+{ "connected": true, "base_url": "https://your-ha.example.com", "expires_at": 1729999999 }
+```
+
+### Planned Endpoints (not yet implemented)
+- `GET /api/integrations/home-assistant/entities` list cached / live entities
+- `POST /api/integrations/home-assistant/service` invoke arbitrary domain.service with entity_id(s)
+- `DELETE /api/integrations/home-assistant/link` unlink & purge stored tokens
+
+### Natural Language Examples
+Examples of queries that will trigger the `homeassistant` tool:
+- "turn on the kitchen lights"
+- "switch off all bedroom fans"
+- "activate the movie scene"
+- "run the bedtime script"
+
+Natural language detection automatically triggers the Home Assistant tool when a control verb (turn on/off, activate, run, start, stop) appears together with a supported domain word (light(s), fan(s), switch(es), scene(s), script(s)). The parser currently picks one matching entity; multi‑entity / area fan‑out is on the roadmap.
 
 **Login URL format:**
 

@@ -8,7 +8,7 @@ requests
 flask-login
 authlib
 requests-oauthlib
-spotipy
 flask-wtf
 cryptography
 gunicorn
+aiohttp

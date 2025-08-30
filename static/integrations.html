@@ -24,66 +24,32 @@
         <div id="loading">Loading integrations...</div>
         <div id="error-message"></div>
 
-        <div class="integration-card" id="spotify-card" style="display:none">
+        <div class="integration-card" id="ha-card" style="display:none">
             <div class="integration-logo">
-                <img src="https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_Green.png"
-                    alt="Spotify Logo">
+                <img src="https://www.home-assistant.io/images/favicon-192x192.png" alt="Home Assistant Logo" width="64" height="64">
             </div>
             <div class="integration-details">
-                <h3 class="integration-name">Spotify <span class="beta-tag">BETA</span></h3>
-                <p class="integration-description">Control your Spotify music playback and see what's currently playing.
-                    Some features may require a premium subscription. Please note that our Spotify API request is
-                    currently under review and you may be unable to link a Spotify account at this time.</p>
-
+                <h3 class="integration-name">Home Assistant <span class="beta-tag">BETA</span></h3>
+                <p class="integration-description">Link your Home Assistant instance to control lights, switches, fans, scenes and scripts with natural language (e.g. "turn on the bedroom lights").</p>
                 <div class="integration-status">
-                    <span class="status-indicator status-disconnected" id="spotify-status-indicator"></span>
-                    <span id="spotify-status">Not connected</span>
+                    <span class="status-indicator status-disconnected" id="ha-status-indicator"></span>
+                    <span id="ha-status">Not connected</span>
                 </div>
-
                 <div class="integration-features">
-                    <p>You can ask neubot to:</p>
+                    <p>After linking you can ask neubot to:</p>
                     <ul class="feature-list">
-                        <li>Play or pause your music</li>
-                        <li>Skip to next or previous track</li>
-                        <li>Show what's currently playing</li>
+                        <li>Turn lights on/off ("turn on the kitchen lights")</li>
+                        <li>Control fans & switches</li>
+                        <li>Activate scenes & run scripts</li>
                     </ul>
                 </div>
-
-                <div id="now-playing-container" style="display:none">
-                    <div class="now-playing">
-                        <div class="album-art">
-                            <img id="album-art-img" src="" alt="Album Art">
-                        </div>
-                        <div class="track-info">
-                            <p class="track-name" id="track-name"></p>
-                            <p class="track-artist" id="track-artist"></p>
-                            <div class="playback-controls">
-                                <button class="control-btn" id="prev-btn">
-                                    <i class="fas fa-step-backward"></i>
-                                </button>
-                                <button class="control-btn play-pause" id="play-pause-btn">
-                                    <i class="fas fa-play" id="play-pause-icon"></i>
-                                </button>
-                                <button class="control-btn" id="next-btn">
-                                    <i class="fas fa-step-forward"></i>
-                                </button>
-                            </div>
-                            <div class="device-info" id="device-info"></div>
-                            <div class="spotify-attribution">
-                                <a href="#" id="spotify-track-link" target="_blank">
-                                    Powered by <img
-                                        src="https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Logo_RGB_Green.png"
-                                        alt="Spotify" height="16">
-                                </a>
-                            </div>
-                        </div>
-                    </div>
+                <div class="ha-link-form" id="ha-link-form">
+                    <p class="note">To connect, click below and follow the two‑step setup (enter your instance URL, authorize, return).</p>
+                    <a class="btn btn-connect" id="ha-link-btn" href="/home-assistant-setup.html">Connect Home Assistant</a>
                 </div>
-
-                <div class="integration-buttons" id="spotify-buttons">
-                    <button class="btn btn-connect" id="spotify-connect-btn">Connect Spotify</button>
-                    <button class="btn btn-disconnect" id="spotify-disconnect-btn"
-                        style="display:none">Disconnect</button>
+                <div class="integration-buttons" id="ha-linked" style="display:none">
+                    <button class="btn btn-disconnect" id="ha-relay-refresh">Refresh Status</button>
+                    <button class="btn btn-disconnect" id="ha-unlink-btn">Disconnect</button>
                 </div>
             </div>
         </div>
@@ -93,23 +59,14 @@
         document.addEventListener('DOMContentLoaded', function () {
             const loadingElement = document.getElementById('loading');
             const errorMessageElement = document.getElementById('error-message');
-            const spotifyCard = document.getElementById('spotify-card');
-            const spotifyStatusIndicator = document.getElementById('spotify-status-indicator');
-            const spotifyStatus = document.getElementById('spotify-status');
-            const spotifyConnectBtn = document.getElementById('spotify-connect-btn');
-            const spotifyDisconnectBtn = document.getElementById('spotify-disconnect-btn');
-            const nowPlayingContainer = document.getElementById('now-playing-container');
-            const trackName = document.getElementById('track-name');
-            const trackArtist = document.getElementById('track-artist');
-            const albumArtImg = document.getElementById('album-art-img');
-            const playPauseBtn = document.getElementById('play-pause-btn');
-            const playPauseIcon = document.getElementById('play-pause-icon');
-            const prevBtn = document.getElementById('prev-btn');
-            const nextBtn = document.getElementById('next-btn');
-            const deviceInfo = document.getElementById('device-info');
-
-            let isPlaying = false;
-            let nowPlayingInterval;
+            const haCard = document.getElementById('ha-card');
+            const haStatusIndicator = document.getElementById('ha-status-indicator');
+            const haStatus = document.getElementById('ha-status');
+            const haLinkForm = document.getElementById('ha-link-form');
+            const haLinkBtn = document.getElementById('ha-link-btn');
+            const haLinked = document.getElementById('ha-linked');
+            const haRefresh = document.getElementById('ha-relay-refresh');
+            const haUnlinkBtn = document.getElementById('ha-unlink-btn');
 
             // Check user authentication first
             fetch('/api/user')
@@ -121,103 +78,36 @@
                     }
 
                     // User is authenticated, load integrations
-                    loadSpotifyIntegration();
+                    loadHAStatus();
                 })
                 .catch(error => {
                     console.error('Error checking authentication:', error);
                     showError('Failed to verify authentication. Please try again.');
                 });
 
-            function loadSpotifyIntegration() {
-                fetch('/api/integrations/spotify/status')
+            function loadHAStatus() {
+                fetch('/api/integrations/home-assistant/status')
                     .then(response => response.json())
                     .then(data => {
                         loadingElement.style.display = 'none';
-                        spotifyCard.style.display = 'flex';
-
-                        if (data.linked) {
-                            spotifyStatusIndicator.className = 'status-indicator status-connected';
-                            spotifyStatus.textContent = data.message;
-                            spotifyConnectBtn.style.display = 'none';
-                            spotifyDisconnectBtn.style.display = 'inline-block';
-
-                            // Check if there's active playback
-                            if (data.active) {
-                                loadNowPlaying();
-                                startNowPlayingUpdates();
-                            }
+                        haCard.style.display = 'flex';
+                        if (data.connected) {
+                            haStatusIndicator.className = 'status-indicator status-connected';
+                            haStatus.textContent = 'Connected';
+                            haLinkForm.style.display = 'none';
+                            haLinked.style.display = 'block';
                         } else {
-                            spotifyStatusIndicator.className = 'status-indicator status-disconnected';
-                            spotifyStatus.textContent = data.message;
-                            spotifyConnectBtn.style.display = 'inline-block';
-                            spotifyDisconnectBtn.style.display = 'none';
+                            haStatusIndicator.className = 'status-indicator status-disconnected';
+                            haStatus.textContent = 'Not connected';
+                            haLinkForm.style.display = 'block';
+                            haLinked.style.display = 'none';
                         }
                     })
                     .catch(error => {
-                        console.error('Error loading Spotify integration:', error);
+                        console.error('Error loading Home Assistant status:', error);
                         loadingElement.style.display = 'none';
-                        showError('Failed to load Spotify integration status. Please try refreshing the page.');
+                        showError('Failed to load Home Assistant status. Please try refreshing the page.');
                     });
-            }
-
-            function loadNowPlaying() {
-                fetch('/api/integrations/spotify/now-playing')
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! Status: ${response.status}`);
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        nowPlayingContainer.style.display = 'block';
-                        trackName.textContent = data.track_name;
-                        trackArtist.textContent = data.artist;
-
-                        if (data.album_art) {
-                            albumArtImg.src = data.album_art;
-                        } else {
-                            albumArtImg.src = 'https://via.placeholder.com/60?text=No+Image';
-                        }
-
-                        // Update Spotify attribution link
-                        const spotifyTrackLink = document.getElementById('spotify-track-link');
-                        if (data.track_url) {
-                            spotifyTrackLink.href = data.track_url;
-                        } else {
-                            spotifyTrackLink.href = 'https://open.spotify.com/';
-                        }
-
-                        isPlaying = data.is_playing;
-                        updatePlayPauseButton();
-
-                        if (data.device) {
-                            deviceInfo.textContent = `Playing on: ${data.device}`;
-                        } else {
-                            deviceInfo.textContent = '';
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error loading now playing:', error);
-                        nowPlayingContainer.style.display = 'none';
-                    });
-            }
-
-            function startNowPlayingUpdates() {
-                // Clear any existing interval
-                if (nowPlayingInterval) {
-                    clearInterval(nowPlayingInterval);
-                }
-
-                // Update now playing info every 5 seconds
-                nowPlayingInterval = setInterval(loadNowPlaying, 5000);
-            }
-
-            function updatePlayPauseButton() {
-                if (isPlaying) {
-                    playPauseIcon.className = 'fas fa-pause';
-                } else {
-                    playPauseIcon.className = 'fas fa-play';
-                }
             }
 
             function showError(message) {
@@ -225,115 +115,15 @@
                 errorMessageElement.style.display = 'block';
             }
 
-            // Control button event listeners
-            spotifyConnectBtn.addEventListener('click', function () {
-                window.location.href = '/login/spotify';
-            });
+            // Link button now navigates to dedicated setup page (no inline handler needed)
 
-            spotifyDisconnectBtn.addEventListener('click', function () {
-                const confirmedDisconnect = confirm('Are you sure you want to disconnect Spotify? You will need to reconnect to use Spotify features.');
-
-                if (confirmedDisconnect) {
-                    fetch('/api/integrations/spotify/disconnect', {
-                        method: 'POST'
-                    })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.success) {
-                                spotifyStatusIndicator.className = 'status-indicator status-disconnected';
-                                spotifyStatus.textContent = 'Not connected';
-                                spotifyConnectBtn.style.display = 'inline-block';
-                                spotifyDisconnectBtn.style.display = 'none';
-                                nowPlayingContainer.style.display = 'none';
-
-                                if (nowPlayingInterval) {
-                                    clearInterval(nowPlayingInterval);
-                                    nowPlayingInterval = null;
-                                }
-                            } else {
-                                showError('Failed to disconnect Spotify: ' + data.message);
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error disconnecting Spotify:', error);
-                            showError('Failed to disconnect Spotify. Please try again.');
+            haRefresh.addEventListener('click', loadHAStatus);
+                        haUnlinkBtn.addEventListener('click', function() {
+                                if(!confirm('Disconnect Home Assistant?')) return;
+                                fetch('/api/integrations/home-assistant/link', { method: 'DELETE' })
+                                    .then(r=>r.json()).then(d=>{ if(d.success){ loadHAStatus(); } else { showError(d.message||'Failed to disconnect'); }})
+                                    .catch(e=>{ console.error(e); showError('Failed to disconnect'); });
                         });
-                }
-            });
-
-            playPauseBtn.addEventListener('click', function () {
-                const action = isPlaying ? 'pause' : 'play';
-
-                fetch('/api/integrations/spotify/control', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ action: action })
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            isPlaying = !isPlaying;
-                            updatePlayPauseButton();
-
-                            // Force an immediate refresh of now playing
-                            setTimeout(loadNowPlaying, 500);
-                        } else {
-                            showError('Failed to control playback: ' + data.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error controlling playback:', error);
-                        showError('Failed to control playback. Please try again.');
-                    });
-            });
-
-            prevBtn.addEventListener('click', function () {
-                fetch('/api/integrations/spotify/control', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ action: 'previous' })
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            // Force an immediate refresh of now playing
-                            setTimeout(loadNowPlaying, 1000);
-                        } else {
-                            showError('Failed to go to previous track: ' + data.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error going to previous track:', error);
-                        showError('Failed to go to previous track. Please try again.');
-                    });
-            });
-
-            nextBtn.addEventListener('click', function () {
-                fetch('/api/integrations/spotify/control', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ action: 'next' })
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            // Force an immediate refresh of now playing
-                            setTimeout(loadNowPlaying, 1000);
-                        } else {
-                            showError('Failed to skip to next track: ' + data.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error skipping to next track:', error);
-                        showError('Failed to skip to next track. Please try again.');
-                    });
-            });
         });
     </script>
 </body>
