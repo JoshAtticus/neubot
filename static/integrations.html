@@ -11,6 +11,12 @@
     <link rel="icon" href="neubot-icon.svg" type="image/svg+xml">
     <script defer data-domain="neubot.joshattic.us"
         src="https://plausible.joshattic.us/js/script.file-downloads.outbound-links.js"></script>
+    <link rel="icon" type="image/png" href="/manifest/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/manifest/favicon.svg" />
+    <link rel="shortcut icon" href="/manifest/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/manifest/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="neubot" />
+    <link rel="manifest" href="/manifest/site.webmanifest" />
 </head>
 
 </head>
@@ -26,11 +32,13 @@
 
         <div class="integration-card" id="ha-card" style="display:none">
             <div class="integration-logo">
-                <img src="https://www.home-assistant.io/images/favicon-192x192.png" alt="Home Assistant Logo" width="64" height="64">
+                <img src="https://www.home-assistant.io/images/favicon-192x192.png" alt="Home Assistant Logo" width="64"
+                    height="64">
             </div>
             <div class="integration-details">
                 <h3 class="integration-name">Home Assistant <span class="beta-tag">BETA</span></h3>
-                <p class="integration-description">Link your Home Assistant instance to control lights, switches, fans, scenes and scripts with natural language (e.g. "turn on the bedroom lights").</p>
+                <p class="integration-description">Link your Home Assistant instance to control lights, switches, fans,
+                    scenes and scripts with natural language (e.g. "turn on the bedroom lights").</p>
                 <div class="integration-status">
                     <span class="status-indicator status-disconnected" id="ha-status-indicator"></span>
                     <span id="ha-status">Not connected</span>
@@ -44,8 +52,10 @@
                     </ul>
                 </div>
                 <div class="ha-link-form" id="ha-link-form">
-                    <p class="note">To connect, click below and follow the two‑step setup (enter your instance URL, authorize, return).</p>
-                    <a class="btn btn-connect" id="ha-link-btn" href="/home-assistant-setup.html">Connect Home Assistant</a>
+                    <p class="note">To connect, click below and follow the two‑step setup (enter your instance URL,
+                        authorize, return).</p>
+                    <a class="btn btn-connect" id="ha-link-btn" href="/home-assistant-setup.html">Connect Home
+                        Assistant</a>
                 </div>
                 <div class="integration-buttons" id="ha-linked" style="display:none">
                     <button class="btn btn-disconnect" id="ha-relay-refresh">Refresh Status</button>
@@ -118,12 +128,12 @@
             // Link button now navigates to dedicated setup page (no inline handler needed)
 
             haRefresh.addEventListener('click', loadHAStatus);
-                        haUnlinkBtn.addEventListener('click', function() {
-                                if(!confirm('Disconnect Home Assistant?')) return;
-                                fetch('/api/integrations/home-assistant/link', { method: 'DELETE' })
-                                    .then(r=>r.json()).then(d=>{ if(d.success){ loadHAStatus(); } else { showError(d.message||'Failed to disconnect'); }})
-                                    .catch(e=>{ console.error(e); showError('Failed to disconnect'); });
-                        });
+            haUnlinkBtn.addEventListener('click', function () {
+                if (!confirm('Disconnect Home Assistant?')) return;
+                fetch('/api/integrations/home-assistant/link', { method: 'DELETE' })
+                    .then(r => r.json()).then(d => { if (d.success) { loadHAStatus(); } else { showError(d.message || 'Failed to disconnect'); } })
+                    .catch(e => { console.error(e); showError('Failed to disconnect'); });
+            });
         });
     </script>
 </body>
