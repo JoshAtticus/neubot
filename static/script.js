@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     const bannerDismissed = localStorage.getItem('neubot_banner_dismissed') === 'true';
     const welcomeModalSeen = localStorage.getItem('neubot_welcome_seen') === 'true';
-    const whatsNewModalSeen = localStorage.getItem('neubot_whats_new_20250622_seen') === 'true';
+    const whatsNewModalSeen = localStorage.getItem('neubot_whats_new_20250830_seen') === 'true';
     
     if (!welcomeModalSeen) {
         welcomeModal.style.display = 'block';
@@ -56,7 +56,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setTimeout(() => {
                 whatsNewModal.style.display = 'none';
             }, 300);
-            localStorage.setItem('neubot_whats_new_20250622_seen', 'true');
+            localStorage.setItem('neubot_whats_new_20250830_seen', 'true');
         });
     }
     
@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setTimeout(() => {
                 whatsNewModal.style.display = 'none';
             }, 300);
-            localStorage.setItem('neubot_whats_new_20250622_seen', 'true');
+            localStorage.setItem('neubot_whats_new_20250830_seen', 'true');
             
             setTimeout(() => {
                 queryInput.focus();
@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setTimeout(() => {
                 whatsNewModal.style.display = 'none';
             }, 300);
-            localStorage.setItem('neubot_whats_new_20250622_seen', 'true');
+            localStorage.setItem('neubot_whats_new_20250830_seen', 'true');
         }
     });
     
@@ -115,7 +115,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 setTimeout(() => {
                     whatsNewModal.style.display = 'none';
                 }, 300);
-                localStorage.setItem('neubot_whats_new_20250622_seen', 'true');
+                localStorage.setItem('neubot_whats_new_20250830_seen', 'true');
             }
             
             setTimeout(() => {
@@ -357,6 +357,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.type === 'search_results') {
                 searchResults = data;
                 plainText = null;
+            } else if (data.type === 'ha_result') {
+                plainText = data.summary || '';
+                const widget = buildHaWidget(data);
+                // append later after text
+                setTimeout(()=>{ messageContent.appendChild(widget); scrollToBottom(); },0);
             }
         } catch (e) {
             const jsonRegex = /\{"type":\s*"(search_results)".*\}/gs;
@@ -404,6 +409,46 @@ document.addEventListener('DOMContentLoaded', function() {
             searchResultsDiv.innerHTML = formatSearchResults(searchResults);
             messageContent.appendChild(searchResultsDiv);
         }
+
+                // HA widget builder
+                function buildHaWidget(data){
+                        const wrap = document.createElement('div');
+                        wrap.className = 'ha-widget';
+                        const list = document.createElement('div');
+                        list.className = 'ha-device-list';
+                        (data.devices||[]).forEach(dev=>{
+                                const row = document.createElement('div');
+                                row.className='ha-device-row';
+                                row.innerHTML = `
+                                    <div class="ha-device-main">
+                                        <span class="ha-name">${dev.name||dev.entity_id}</span>
+                                        <span class="ha-status ${dev.success?'ok':'err'}">${dev.success? (data.action==='turn_on'?'on':'off') : 'error'}</span>
+                                    </div>
+                                `;
+                                list.appendChild(row);
+                        });
+                        wrap.appendChild(list);
+                        if(data.domain==='light'){
+                                const controls = document.createElement('div');
+                                controls.className='ha-inline-controls';
+                                controls.innerHTML = `
+                                    <label>Brightness <input type="range" min="1" max="100" value="${data.applied && data.applied.brightness_pct? data.applied.brightness_pct:100}" class="ha-brightness"/></label>
+                                    <input type="text" placeholder="color name" class="ha-color" value="${data.applied && data.applied.color_name? data.applied.color_name:''}" />
+                                    <button class="ha-apply">Apply</button>
+                                `;
+                                wrap.appendChild(controls);
+                                controls.querySelector('.ha-apply').addEventListener('click', ()=>{
+                                        const b = controls.querySelector('.ha-brightness').value;
+                                        const c = controls.querySelector('.ha-color').value.trim();
+                                        // Send a follow-up natural language command leveraging parser
+                                        let follow = 'set lights to ' + b + '%';
+                                        if(c) follow += ' ' + c;
+                                        queryInput.value = follow;
+                                        processQuery();
+                                });
+                        }
+                        return wrap;
+                }
         
     // Spotify track rendering removed (integration deprecated)
         

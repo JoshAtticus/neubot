@@ -2175,3 +2175,15 @@ select {
 .close-whats-new-modal:hover {
     color: #fff;
 }
+
+/* Home Assistant widget */
+.ha-widget { margin-top:12px;padding:12px;border:1px solid #333;border-radius:8px;background:#181818;font-size:14px; }
+.ha-device-list { display:flex;flex-direction:column;gap:6px;margin-bottom:8px; }
+.ha-device-row { display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border:1px solid #2a2a2a;border-radius:6px;background:#202020; }
+.ha-device-row .ha-name { font-weight:600; }
+.ha-status.ok { color:#46c46a; }
+.ha-status.err { color:#ff6565; }
+.ha-inline-controls { display:flex;gap:8px;flex-wrap:wrap;align-items:center; }
+.ha-inline-controls input[type=range] { width:140px; }
+.ha-inline-controls .ha-color { background:#111;border:1px solid #333;color:#eee;padding:6px 8px;border-radius:6px; }
+.ha-inline-controls .ha-apply { background:#2d6cdf;color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600; }

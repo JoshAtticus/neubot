@@ -488,6 +488,15 @@ class SemanticParser:
             "calculate": "calculator_query",
             "compute": "calculator_query",
             "solve": "calculator_query",
+            "turn": "command_query",
+            "switch": "command_query",
+            "activate": "command_query",
+            "run": "command_query",
+            "set": "command_query",
+            "dim": "command_query",
+            "brighten": "command_query",
+            "open": "command_query",
+            "close": "command_query",
         }
         
         self.greeting_phrases = [
@@ -519,6 +528,38 @@ class SemanticParser:
             "location": self._extract_location,
             "date": self._extract_date,
             "math_expression": self._extract_math_expression,
+        }
+
+        self.ha_action_verbs = {
+            "turn on": "turn_on",
+            "switch on": "turn_on",
+            "activate": "turn_on",
+            "start": "turn_on",
+            "run": "turn_on",
+            "turn off": "turn_off",
+            "switch off": "turn_off",
+            "deactivate": "turn_off",
+            "stop": "turn_off",
+            "on": "turn_on",
+            "off": "turn_off",
+        }
+        self.ha_domain_terms = {
+            "light": "light",
+            "lights": "light",
+            "lamp": "light",
+            "lamps": "light",
+            "bulb": "light",
+            "bulbs": "light",
+            "downlight": "light",
+            "downlights": "light",
+            "fan": "fan",
+            "fans": "fan",
+            "switch": "switch",
+            "switches": "switch",
+            "scene": "scene",
+            "scenes": "scene",
+            "script": "script",
+            "scripts": "script",
         }
 
         self.search_indicator_phrases = [
@@ -590,6 +631,12 @@ class SemanticParser:
                 search_query = self._extract_search_query(query)
                 if search_query:
                     entities["search_query"] = search_query
+
+            if tool == "homeassistant":
+                ha_entities = self._extract_ha_entities(query)
+                entities.update(ha_entities)
+                # Pass full query to downstream HA tool for fallback parsing
+                entities.setdefault("search_query", query)
         
         self._add_thought("Extracted entities", entities)
         return entities
@@ -851,6 +898,74 @@ class SemanticParser:
         self._add_thought("No search query extracted", None)
         return None
 
+    def _extract_ha_entities(self, query: str) -> Dict[str, Any]:
+        """Extract Home Assistant specific entities: action, domain, area/room, device phrase.
+
+        Returns keys: ha_action, ha_domain, ha_area, ha_device_phrase (subset of query).
+        """
+        self._add_thought("Extracting Home Assistant entities", None)
+        ql = query.lower()
+        result: Dict[str, Any] = {}
+
+        # Action: prefer two-word verb phrases
+        action = None
+        for phrase, canonical in self.ha_action_verbs.items():
+            if " " in phrase and phrase in ql:
+                action = canonical
+                break
+        if not action:
+            # Single token verbs / states
+            tokens = re.findall(r"\b\w+\b", ql)
+            for i, tok in enumerate(tokens):
+                if tok in self.ha_action_verbs and len(tok) > 2:  # avoid 'on'/'off' first
+                    action = self.ha_action_verbs[tok]
+                    break
+            if not action:
+                # on/off alone
+                if re.search(r"\bturn\s+on\b|\bon\b", ql):
+                    action = "turn_on"
+                elif re.search(r"\bturn\s+off\b|\boff\b", ql):
+                    action = "turn_off"
+        if action:
+            result["ha_action"] = action
+
+        # Domain
+        domain = None
+        for term, canonical in self.ha_domain_terms.items():
+            if re.search(rf"\b{re.escape(term)}\b", ql):
+                domain = canonical
+                break
+        if domain:
+            result["ha_domain"] = domain
+
+        # Area / room heuristic: words before domain term
+        ha_area = None
+        if domain:
+            m = re.search(rf"\b([a-zA-Z ]{{2,40}}?)\b(?:{domain}|{domain}s|lamp|lamps|bulb|bulbs)\b", ql)
+            if m:
+                candidate = m.group(1).strip()
+                # Remove leading verbs/stop words
+                candidate = re.sub(r"\b(turn|switch|set|activate|run|start|stop|on|off|the|my|a|to)\b", "", candidate).strip()
+                if 0 < len(candidate.split()) <= 3:
+                    ha_area = candidate
+        if ha_area:
+            result["ha_area"] = ha_area
+
+        # Device phrase: capture adjective/noun sequence ending in domain synonym
+        device_phrase = None
+        domain_pattern = "|".join(sorted(set(self.ha_domain_terms.keys()), key=len, reverse=True))
+        dm = re.search(rf"\b([a-zA-Z0-9 ]{{2,50}}?\b(?:{domain_pattern}))\b", ql)
+        if dm:
+            phrase = dm.group(1).strip()
+            phrase = re.sub(r"\b(turn|switch|set|activate|run|start|stop|on|off|the|my|a|to)\b", "", phrase).strip()
+            if phrase:
+                device_phrase = phrase
+        if device_phrase:
+            result["ha_device_phrase"] = device_phrase
+
+        self._add_thought("Extracted HA entities", result)
+        return result
+
     def process_query(self, query: str, user_timezone: str = DEFAULT_TIMEZONE) -> Tuple[str, List[ThoughtStep], str]:
         """Process user query and return response, thoughts, and highlighted query"""
         response, thoughts, extracted_location = self._process_query_internal(query, user_timezone)
@@ -922,13 +1037,16 @@ class SemanticParser:
                 tools.add("day")
                 self._add_thought("Inferred tool from context", "day")
 
-        # Home Assistant natural language detection (verbs + domains)
-        ha_action_pattern = r"\b(turn on|turn off|switch on|switch off|activate|run|start|stop)\b"
-        ha_domain_pattern = r"\b(light|lights|fan|fans|switch|switches|scene|scenes|script|scripts)\b"
-        if (re.search(ha_action_pattern, query_lower) and re.search(ha_domain_pattern, query_lower)) and "homeassistant" not in tools:
-            tools.add("homeassistant")
-            entities["search_query"] = query  # pass full query for downstream parsing
-            self._add_thought("Inferred Home Assistant tool from verbs/domains", None)
+        # Home Assistant natural language detection (verbs + domains). Detect before entity extraction.
+        ha_detect = False
+        for term in self.ha_domain_terms.keys():
+            if re.search(rf"\b{re.escape(term)}\b", query_lower):
+                ha_detect = True
+                break
+        if ha_detect and re.search(r"\b(turn|switch|activate|run|start|stop|on|off|set|dim|brighten|open|close)\b", query_lower):
+            if "homeassistant" not in tools:
+                tools.add("homeassistant")
+                self._add_thought("Inferred Home Assistant tool from verbs/domains", None)
 
         entities = self._extract_entities(query, tools)
         extracted_location = entities.get("location")
@@ -1093,22 +1211,24 @@ class SemanticParser:
     # Removed Spotify action extraction & tool.
 
     def _home_assistant_tool(self, entities: Dict[str, Any]) -> str:
-        """Execute simple Home Assistant device commands based on the natural language query.
+        """Execute simple Home Assistant device commands based on natural language.
 
-        Supports turning on/off lights, fans, switches, activating scenes/scripts.
-        Relies on a previously linked Home Assistant instance via REST API.
+        Supports: lights, fans, switches, scenes, scripts. (Single target heuristic.)
         """
         self._add_thought("Executing Home Assistant tool", None)
         if not current_user.is_authenticated:
             return "You need to login and link Home Assistant first."
-        # Fetch link
+
+        # Load link info
         with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT base_url, access_token FROM home_assistant_links WHERE user_id = ?', (current_user.id,))
-            row = cursor.fetchone()
+            cur = conn.cursor()
+            cur.execute('SELECT base_url, access_token, refresh_token, expires_at FROM home_assistant_links WHERE user_id = ?', (current_user.id,))
+            row = cur.fetchone()
         if not row:
             return "You haven't linked Home Assistant yet. Go to Integrations to connect it."
+
         base_url = row['base_url']
+
         def _decrypt(val):
             if not val:
                 return None
@@ -1116,20 +1236,27 @@ class SemanticParser:
                 return decrypt_token(val)
             except Exception:
                 return val
+
         access_token = _decrypt(row['access_token'])
-        query = entities.get("search_query") or ""
+        refresh_token = _decrypt(row['refresh_token']) if 'refresh_token' in row.keys() and row['refresh_token'] else None
+        expires_at = row['expires_at'] if 'expires_at' in row.keys() and row['expires_at'] else 0
+
+        query = entities.get('search_query') or ''
         ql = query.lower()
-        refresh_token = _decrypt(row['refresh_token'])
-        expires_at = row['expires_at'] or 0
+
+        # Refresh token if expired
         now_ts = int(time.time())
         if expires_at and expires_at < now_ts - 30 and refresh_token:
             self._add_thought("Access token expired, attempting refresh", expires_at)
             try:
-                token_resp = requests.post(f"{base_url}/auth/token", data={
-                    'grant_type': 'refresh_token',
-                    'refresh_token': refresh_token,
-                    'client_id': url_for('ha_callback', _external=True)
-                }, timeout=10)
+                token_resp = requests.post(
+                    f"{base_url}/auth/token",
+                    data={
+                        'grant_type': 'refresh_token',
+                        'refresh_token': refresh_token,
+                        'client_id': url_for('ha_callback', _external=True)
+                    }, timeout=10
+                )
                 if token_resp.status_code == 200:
                     td = token_resp.json()
                     access_token = td.get('access_token', access_token)
@@ -1142,75 +1269,184 @@ class SemanticParser:
                     self._add_thought("Refresh failed", token_resp.text[:120])
             except Exception as e:
                 self._add_thought("Refresh exception", str(e))
-        # Determine action
-        action = None
-        if re.search(r"\b(turn on|switch on|activate|start|run)\b", ql):
-            action = 'turn_on'
-        elif re.search(r"\b(turn off|switch off|deactivate|stop)\b", ql):
-            action = 'turn_off'
-        # Determine domain
-        domain = None
-        if re.search(r"\blight(s)?\b", ql):
-            domain = 'light'
-        elif re.search(r"\bfan(s)?\b", ql):
-            domain = 'fan'
-        elif re.search(r"\bswitch(es)?\b", ql):
-            domain = 'switch'
-        elif re.search(r"\bscene(s)?\b", ql):
-            domain = 'scene'; action = 'turn_on'
-        elif re.search(r"\bscript(s)?\b", ql):
-            domain = 'script'; action = 'turn_on'
+
+        # Structured entities first
+        action = entities.get('ha_action')
+        domain = entities.get('ha_domain')
+        area = entities.get('ha_area')
+        device_phrase = entities.get('ha_device_phrase')
+
+        # Fallback regex detection
+        if not action:
+            if re.search(r"\b(turn on|switch on|activate|start|run)\b", ql):
+                action = 'turn_on'
+            elif re.search(r"\b(turn off|switch off|deactivate|stop)\b", ql):
+                action = 'turn_off'
         if not domain:
-            return "I couldn't determine what device you want to control. Try 'turn on the bedroom lights'."
-        # Extract room name (simple heuristic: words before device keyword)
-        room_match = re.search(r"\b(?:my|the)?\s*([a-zA-Z ]+?)\s+(?:light|lights|fan|fans|switch|switches)\b", ql)
-        room = None
-        if room_match:
-            candidate = room_match.group(1).strip()
-            if candidate and len(candidate.split()) <= 3 and not re.search(r"turn|on|off|activate|run|switch", candidate):
-                room = candidate
-        # Fetch states from Home Assistant
+            for term, canonical in self.ha_domain_terms.items():
+                if re.search(rf"\b{re.escape(term)}\b", ql):
+                    domain = canonical
+                    break
+        if domain in ('scene', 'script') and not action:
+            action = 'turn_on'
+        if not domain:
+            return json.dumps({"type":"ha_result","error":"no_domain","message":"I couldn't determine what device you want to control."})
+
+        # Area detection fallback
+        room = area
+        if not room:
+            room_match = re.search(r"\b(?:my|the)?\s*([a-zA-Z ]+?)\s+(?:light|lights|fan|fans|switch|switches|lamp|lamps|bulb|bulbs)\b", ql)
+            if room_match:
+                cand = room_match.group(1).strip()
+                if cand and len(cand.split()) <= 3 and not re.search(r"turn|on|off|activate|run|switch|set|dim|brighten", cand):
+                    room = cand
+
+        # Fetch states
         try:
-            resp = requests.get(f"{base_url}/api/states", headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}, timeout=5)
+            resp = requests.get(
+                f"{base_url}/api/states",
+                headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+                timeout=5
+            )
             if resp.status_code != 200:
                 return f"Failed to reach Home Assistant ({resp.status_code})."
             states = resp.json()
         except Exception as e:
             return f"Error contacting Home Assistant: {e}"
-        # Find target entity
+
+        # Target entity selection
         target_entity = None
         friendly = None
+        phrase_tokens = []
+        if device_phrase:
+            phrase_tokens = [t for t in re.findall(r"\w+", device_phrase.lower()) if t not in ('the', 'a', 'my')]
+        best_score = 0.0
         for st in states:
-            entity_id = st.get('entity_id','')
-            if not entity_id.startswith(domain + "."):
+            eid = st.get('entity_id', '')
+            if not eid.startswith(domain + "."):
                 continue
             attrs = st.get('attributes', {})
-            fname = attrs.get('friendly_name','')
-            if room:
-                if room.lower() in fname.lower():
-                    target_entity = entity_id
-                    friendly = fname
-                    break
+            fname = attrs.get('friendly_name', '')
+            fname_l = fname.lower()
+            score = 0.0
+            if phrase_tokens:
+                matches = sum(1 for t in phrase_tokens if t in fname_l)
+                score = matches / max(1, len(phrase_tokens))
+            elif room and room.lower() in fname_l:
+                score = 0.6
             else:
-                target_entity = entity_id
+                score = 0.1
+            if score > best_score and score >= 0.3:
+                best_score = score
+                target_entity = eid
                 friendly = fname
+            if score >= 0.99:
                 break
-        if not target_entity:
-            return "I couldn't find a matching device in Home Assistant."
-        if not action:
-            return f"I found {friendly or target_entity} but need to know if you want it on or off."
-        # Call service
-        service_domain = domain
-        service = action
-        try:
-            svc_resp = requests.post(f"{base_url}/api/services/{service_domain}/{service}", headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}, json={"entity_id": target_entity}, timeout=5)
-            if svc_resp.status_code in (200, 201):
-                state_word = "on" if action == 'turn_on' else 'off'
-                return f"Set {friendly or target_entity} {state_word}."
+        # Multi-entity & color/brightness enhancements
+        # Tokenize query for multi-match
+        q_tokens = [t for t in re.findall(r"[a-zA-Z0-9']+", ql) if t not in {'turn','on','off','the','a','my','all','and','to','set','please'}]
+        token_set = set(q_tokens)
+
+        # Identify all candidate entities in this domain present in query
+        matched_entities = []
+        for st in states:
+            eid = st.get('entity_id','')
+            if not eid.startswith(domain + '.'):
+                continue
+            fname = st.get('attributes', {}).get('friendly_name','')
+            fname_l = fname.lower()
+            name_tokens = [t for t in re.findall(r"[a-zA-Z0-9']+", fname_l) if t not in {'the','a','and','of'}]
+            if 'all' in token_set and (domain in token_set or domain + 's' in token_set or any(t.endswith(domain) for t in token_set)):
+                matched_entities.append((eid,fname, st.get('state')))
             else:
-                return f"Service call failed ({svc_resp.status_code})."
-        except Exception as e:
-            return f"Error calling service: {e}"
+                if any(nt in token_set for nt in name_tokens):
+                    matched_entities.append((eid,fname, st.get('state')))
+
+        if not matched_entities and target_entity:
+            matched_entities = [(target_entity, friendly, next((s.get('state') for s in states if s.get('entity_id')==target_entity), None))]
+
+        if not matched_entities:
+            return json.dumps({"type":"ha_result","error":"no_match","message":"I couldn't find a matching device."})
+
+        # Color & brightness parsing
+        color_words = ["red","blue","green","yellow","purple","pink","orange","white","warm white","cool white","cyan","magenta"]
+        color_name = None
+        # Longer phrases first
+        for cw in sorted(color_words, key=len, reverse=True):
+            if cw in ql:
+                color_name = cw
+                break
+        brightness_pct = None
+        m_pct = re.search(r"(\d{1,3})%", ql)
+        if m_pct:
+            pct = int(m_pct.group(1))
+            brightness_pct = max(1, min(100, pct))
+        else:
+            if re.search(r"\bhalf\b", ql): brightness_pct = 50
+            elif re.search(r"\b(full|max(imum)?|bright(est)?)\b", ql): brightness_pct = 100
+            elif re.search(r"\b(dim|low)\b", ql): brightness_pct = 25
+            elif re.search(r"\bmedium\b", ql): brightness_pct = 60
+
+        if color_name and not action:
+            action = 'turn_on'
+
+        if not action:
+            return json.dumps({"type":"ha_result","error":"no_action","message":"Need to know if you want them on or off."})
+
+        # Perform service calls
+        results = []
+        for eid, fname, state_val in matched_entities:
+            svc_data = {"entity_id": eid}
+            if domain == 'light' and action == 'turn_on':
+                if brightness_pct is not None:
+                    svc_data['brightness_pct'] = brightness_pct
+                if color_name:
+                    # Home Assistant supports color_name
+                    svc_data['color_name'] = color_name
+            try:
+                svc = requests.post(
+                    f"{base_url}/api/services/{domain}/{action}",
+                    headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+                    json=svc_data,
+                    timeout=5
+                )
+                success = svc.status_code in (200,201)
+                results.append({
+                    "entity_id": eid,
+                    "name": fname,
+                    "requested_action": action,
+                    "success": success,
+                    "code": svc.status_code,
+                    "state_before": state_val
+                })
+            except Exception as e:
+                results.append({
+                    "entity_id": eid,
+                    "name": fname,
+                    "requested_action": action,
+                    "success": False,
+                    "error": str(e)
+                })
+
+        success_names = [r['name'] for r in results if r['success']]
+        summary_parts = []
+        if success_names:
+            verb = 'on' if action == 'turn_on' else 'off'
+            summary = f"Set {len(success_names)} {domain}{'s' if len(success_names)!=1 else ''} {verb}"
+            summary_parts.append(summary)
+        if color_name:
+            summary_parts.append(f"color {color_name}")
+        if brightness_pct is not None:
+            summary_parts.append(f"brightness {brightness_pct}%")
+        summary_text = (', '.join(summary_parts) + ".") if summary_parts else "Action attempted."
+        return json.dumps({
+            "type": "ha_result",
+            "summary": summary_text,
+            "action": action,
+            "domain": domain,
+            "devices": results,
+            "applied": {"color_name": color_name, "brightness_pct": brightness_pct}
+        })
 
     def _calculator_tool(self, entities: Dict[str, Any]) -> str:
         """Perform a calculation based on the query"""
