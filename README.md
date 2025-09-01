@@ -8,7 +8,6 @@ a simple semantic parsing based chatbot (no llms here!)
 ## features
 - semantic parsing (aka NLA, natural language processing)
 - tools for time, date, search, weather, calculations
-- optional Home Assistant integration for controlling lights, switches, fans, scenes & scripts
 - clean user interface
 - google & github oauth2 login
 

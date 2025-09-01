@@ -1498,7 +1498,9 @@ class SemanticParser:
         color_name = ordered_colors[0] if ordered_colors else None
         brightness_pct = detect_brightness(ql)
 
-        if color_name and not action:
+        # If user specifies a color or brightness without an explicit action (on/off),
+        # assume they want the light(s) turned on.
+        if (color_name or (brightness_pct is not None)) and not action:
             action = 'turn_on'
         if not action:
             return json.dumps({"type":"ha_result","error":"no_action","message":"Need to know if you want them on or off."})

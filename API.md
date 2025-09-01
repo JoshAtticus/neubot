@@ -5,7 +5,7 @@ comprehensive API reference for neubot
 
 ## base URL
 ```
-https://neubot.joshatticus.site/
+https://neubot.joshattic.us/
 ```
 
 ## core API endpoints
@@ -88,58 +88,6 @@ returns information about the currently authenticated user
 }
 ```
 
-
-## semantic parsing tools
-
-neubot includes several built-in tools that can be triggered through natural language:
-
-### time tool
-- **trigger words:** "time", "clock"
-- **functionality:** gets current time for any location
-- **example queries:** 
-  - "what time is it?"
-  - "what's the time in tokyo?"
-  - "current time in london"
-
-### weather tool  
-- **trigger words:** "weather", "temperature"
-- **functionality:** gets weather conditions using OpenWeatherMap API
-- **example queries:**
-  - "what's the weather in paris?"
-  - "temperature in new york"
-  - "how's the weather today?"
-
-### date tool
-- **trigger words:** "date", "today"
-- **functionality:** gets current date
-- **example queries:**
-  - "what's today's date?"
-  - "what date is it?"
-
-### day tool
-- **trigger words:** "day", "tomorrow"
-- **functionality:** gets day of the week
-- **example queries:**
-  - "what day is it?"
-  - "what day is tomorrow?"
-
-### calculator tool
-- **trigger words:** "calculate", "compute", "solve"
-- **functionality:** performs mathematical calculations
-- **example queries:**
-  - "calculate 15 + 27"
-  - "what's 42 * 8?"
-  - "solve (10 + 5) / 3"
-
-### web search tool
-- **trigger words:** "search", "find", "look up"
-- **functionality:** searches the web using Brave Search API
-- **example queries:**
-  - "search for python tutorials"
-  - "find information about climate change"
-  - "look up latest news"
-
-
 ## rate limiting
 
 neubot implements rate limiting to manage API usage:
@@ -199,7 +147,7 @@ Replace `[YOUR_TOKEN]` with the token you received after a successful login.
 
 **Example using `curl`:**
 ```bash
-curl -X GET https://neubot.joshatticus.site/api/limits \
+curl -X GET https://neubot.joshattic.us/api/limits \
      -H "Authorization: Bearer [YOUR_TOKEN]"
 ```
 
@@ -239,23 +187,9 @@ Success response example:
 { "connected": true, "base_url": "https://your-ha.example.com", "expires_at": 1729999999 }
 ```
 
-### Planned Endpoints (not yet implemented)
-- `GET /api/integrations/home-assistant/entities` list cached / live entities
-- `POST /api/integrations/home-assistant/service` invoke arbitrary domain.service with entity_id(s)
-- `DELETE /api/integrations/home-assistant/link` unlink & purge stored tokens
-
-### Natural Language Examples
-Examples of queries that will trigger the `homeassistant` tool:
-- "turn on the kitchen lights"
-- "switch off all bedroom fans"
-- "activate the movie scene"
-- "run the bedtime script"
-
-Natural language detection automatically triggers the Home Assistant tool when a control verb (turn on/off, activate, run, start, stop) appears together with a supported domain word (light(s), fan(s), switch(es), scene(s), script(s)). The parser currently picks one matching entity; multi‑entity / area fan‑out is on the roadmap.
-
 **Login URL format:**
 
-`https://neubot.joshatticus.site/login/app?callbackURL=[YOUR_CALLBACK_URL]`
+`https://neubot.joshattic.us/login/app?callbackURL=[YOUR_CALLBACK_URL]`
 
 **Example `callbackURL`:**
 
@@ -263,7 +197,7 @@ Natural language detection automatically triggers the Home Assistant tool when a
 
 **Example login URL:**
 
-`https://neubot.joshatticus.site/login/app?callbackURL=https://yourapp.com/auth/neubot?token=%5BTOKEN%5D`
+`https://neubot.joshattic.us/login/app?callbackURL=https://yourapp.com/auth/neubot?token=%5BTOKEN%5D`
 
 Note that the `callbackURL` must be URL encoded.
 
