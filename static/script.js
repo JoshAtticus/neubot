@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const bannerDismissed = localStorage.getItem('neubot_banner_dismissed') === 'true';
     const welcomeModalSeen = localStorage.getItem('neubot_welcome_seen') === 'true';
-    const whatsNewModalSeen = localStorage.getItem('neubot_whats_new_20250901_seen') === 'true';
+    const whatsNewModalSeen = localStorage.getItem('neubot_whats_new_20250906_seen') === 'true';
 
     if (!welcomeModalSeen) {
         welcomeModal.style.display = 'block';
@@ -56,7 +56,7 @@ document.addEventListener('DOMContentLoaded', function () {
             setTimeout(() => {
                 whatsNewModal.style.display = 'none';
             }, 300);
-            localStorage.setItem('neubot_whats_new_20250901_seen', 'true');
+            localStorage.setItem('neubot_whats_new_20250906_seen', 'true');
         });
     }
 
@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', function () {
             setTimeout(() => {
                 whatsNewModal.style.display = 'none';
             }, 300);
-            localStorage.setItem('neubot_whats_new_20250901_seen', 'true');
+            localStorage.setItem('neubot_whats_new_20250906_seen', 'true');
 
             setTimeout(() => {
                 queryInput.focus();
@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', function () {
             setTimeout(() => {
                 whatsNewModal.style.display = 'none';
             }, 300);
-            localStorage.setItem('neubot_whats_new_20250901_seen', 'true');
+            localStorage.setItem('neubot_whats_new_20250906_seen', 'true');
         }
     });
 
@@ -115,7 +115,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 setTimeout(() => {
                     whatsNewModal.style.display = 'none';
                 }, 300);
-                localStorage.setItem('neubot_whats_new_20250901_seen', 'true');
+                localStorage.setItem('neubot_whats_new_20250906_seen', 'true');
             }
 
             setTimeout(() => {
@@ -277,102 +277,8 @@ document.addEventListener('DOMContentLoaded', function () {
         const detailsId = 'details-' + Date.now();
         const toggleId = 'toggle-' + Date.now();
 
-        let searchResults = null;
-        let plainText = text;
-
-        try {
-            const data = JSON.parse(text);
-            if (data.type === 'search_results') {
-                searchResults = data;
-                plainText = null;
-            } else if (data.type === 'ha_result') {
-                plainText = data.summary || '';
-                const widget = buildHaWidget(data);
-                // HA widget builder (compact card with icons & indicators)
-                function buildHaWidget(data) {
-                    const domain = data.domain || 'device';
-                    const devs = data.devices || [];
-                    const action = data.action || '';
-                    const applied = data.applied || {};
-                    const iconMap = { light: '💡', switch: '⏻', fan: '🌀', scene: '🎬', script: '▶', group: '📦' };
-                    const ico = iconMap[domain] || '⌂';
-                    const wrap = document.createElement('div');
-                    wrap.className = 'ha-block';
-                    // Header
-                    const header = document.createElement('div');
-                    header.className = 'ha-block-header';
-                    let stateWord = '';
-                    if (action === 'turn_on') stateWord = 'on';
-                    else if (action === 'turn_off') stateWord = 'off';
-                    let appliedBits = [];
-                    if (applied.color_name) {
-                        appliedBits.push(applied.color_name);
-                    }
-                    if (applied.brightness_pct) {
-                        appliedBits.push(applied.brightness_pct + '%');
-                    }
-                    const appliedText = appliedBits.length ? ' • ' + appliedBits.join(' @ ').replace(' @ %', '%') : '';
-                    header.innerHTML = `<span class="ha-ico" aria-hidden="true">${ico}</span><span class="ha-h-text">${devs.length} ${domain}${devs.length === 1 ? '' : 's'} ${stateWord}${appliedText}</span>`;
-                    wrap.appendChild(header);
-                    // Device list
-                    const list = document.createElement('ul');
-                    list.className = 'ha-dev-list';
-                    if (!devs.length) {
-                        const li = document.createElement('li');
-                        li.className = 'empty';
-                        li.textContent = 'No matching devices';
-                        list.appendChild(li);
-                    } else {
-                        devs.forEach(d => {
-                            const li = document.createElement('li');
-                            const success = !!d.success;
-                            const isOn = action === 'turn_on' || (action === 'multi' && d.requested_action === 'turn_on');
-                            const stateLabel = success ? (isOn ? 'on' : 'off') : 'error';
-                            const stateClass = success ? (isOn ? 'on' : 'off') : 'err';
-                            let extra = '';
-                            if (d.applied_color) {
-                                extra += `<span class="ha-mini-chip" style="--ha-chip-color:${d.applied_color}" title="${d.applied_color}"></span>`;
-                            }
-                            if (typeof d.applied_brightness_pct === 'number') {
-                                extra += `<span class="ha-mini-br">${d.applied_brightness_pct}%</span>`;
-                            }
-                            li.innerHTML = `<span class="nm" title="${d.entity_id}">${d.name || d.entity_id}</span><span class="st ${stateClass}"><span class="dot"></span>${stateLabel}</span>${extra}`;
-                            list.appendChild(li);
-                        });
-                    }
-                    wrap.appendChild(list);
-                    // Color chip if color applied
-                    if (applied.color_name) {
-                        const colorChip = document.createElement('span');
-                        colorChip.className = 'ha-color-chip';
-                        colorChip.style.setProperty('--ha-chip-color', applied.color_name);
-                        colorChip.title = applied.color_name + (applied.brightness_pct ? ` @ ${applied.brightness_pct}%` : '');
-                        header.appendChild(colorChip);
-                    }
-                    return wrap;
-                }
-                // append later after text
-                setTimeout(() => { messageContent.appendChild(widget); scrollToBottom(); }, 0);
-            }
-        } catch (e) {
-            const jsonRegex = /\{"type":\s*"(search_results)".*\}/gs;
-            const match = text.match(jsonRegex);
-
-            if (match) {
-                try {
-                    const jsonData = JSON.parse(match[0]);
-
-                    if (jsonData.type === 'search_results') {
-                        searchResults = jsonData;
-                        plainText = text.replace(jsonRegex, '').trim();
-                    }
-                } catch (err) {
-                    plainText = text;
-                }
-            } else {
-                plainText = text;
-            }
-        }
+    // Generic widget parsing: supports multiple widget JSON payloads in one response
+    const { plainText, widgets, searchResults } = extractWidgets(text);
 
         const messageHTML = `
             <div class="bot-icon"><img src="neubot-icon.svg" alt="Bot"></div>
@@ -388,7 +294,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const messageContent = messageDiv.querySelector('.message-content');
 
-        if (plainText) {
+    if (plainText) {
             const textMessage = document.createElement('div');
             textMessage.className = 'message-text';
             textMessage.innerHTML = plainText;
@@ -399,6 +305,14 @@ document.addEventListener('DOMContentLoaded', function () {
             const searchResultsDiv = document.createElement('div');
             searchResultsDiv.innerHTML = formatSearchResults(searchResults);
             messageContent.appendChild(searchResultsDiv);
+        }
+
+        // Render any other widgets
+        if (widgets && widgets.length) {
+            widgets.forEach(w => {
+                const el = renderWidget(w);
+                if (el) messageContent.appendChild(el);
+            });
         }
 
         // HA widget builder (inline minimalist list)
@@ -579,6 +493,188 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     addBotMessage('Hi! How can I help you?', []);
+
+    // --- Widget helper utilities ---
+    function extractWidgets(raw) {
+        let searchResults = null;
+        let plainText = raw;
+        const widgets = [];
+
+        // Fast path: whole string is a single JSON object
+        try {
+            const obj = JSON.parse(raw);
+            if (obj && obj.type) {
+                if (obj.type === 'search_results') {
+                    searchResults = obj; plainText = '';
+                } else if (obj.type === 'ha_result') {
+                    widgets.push(obj); plainText = obj.summary || '';
+                } else if (obj.type === 'composite') {
+                    if (Array.isArray(obj.widgets)) obj.widgets.forEach(w => widgets.push(w));
+                    plainText = obj.text || '';
+                }
+                return { plainText: plainText.trim(), widgets, searchResults };
+            }
+        } catch (_) { /* ignore */ }
+
+        // Balanced brace scanning for embedded objects preceded by text (e.g. 'Greetings, {...}')
+        const foundObjects = [];
+        for (let i = 0; i < raw.length; i++) {
+            if (raw[i] === '{') {
+                let depth = 0;
+                let inStr = false;
+                let esc = false;
+                for (let j = i; j < raw.length; j++) {
+                    const c = raw[j];
+                    if (inStr) {
+                        if (!esc && c === '"') inStr = false;
+                        esc = (!esc && c === '\\');
+                    } else {
+                        if (c === '"') { inStr = true; }
+                        else if (c === '{') depth++;
+                        else if (c === '}') {
+                            depth--;
+                            if (depth === 0) {
+                                const snippet = raw.slice(i, j + 1);
+                                try {
+                                    const obj = JSON.parse(snippet);
+                                    if (obj && obj.type) {
+                                        foundObjects.push({ obj, snippet });
+                                        i = j; // advance outer loop
+                                    }
+                                } catch (_) { /* not valid */ }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        foundObjects.forEach(({ obj, snippet }) => {
+            if (obj.type === 'search_results' && !searchResults) {
+                searchResults = obj;
+                plainText = plainText.replace(snippet, ' ').trim();
+            } else if (obj.type === 'ha_result') {
+                widgets.push(obj);
+                plainText = plainText.replace(snippet, ' ').trim();
+            } else if (obj.type === 'composite') {
+                if (Array.isArray(obj.widgets)) obj.widgets.forEach(w => widgets.push(w));
+                if (obj.text) plainText = (plainText.replace(snippet, ' ') + ' ' + obj.text).trim();
+            }
+        });
+
+        // If a single HA widget and plainText ends with trailing comma/greeting punctuation, keep greeting text only
+        // If we have at least one widget and the plain text ends with a comma, drop the comma for cleaner look
+        let cleaned = plainText.trim();
+        if (widgets.length && /,\s*$/.test(cleaned)) {
+            cleaned = cleaned.replace(/,\s*$/, '');
+        }
+        return { plainText: cleaned, widgets, searchResults };
+    }
+
+    function renderWidget(widget) {
+        switch (widget.type) {
+            case 'ha_result':
+                return buildHaResultWidget(widget);
+            case 'fun_result':
+                return buildFunResultWidget(widget);
+            default:
+                return null; // Unknown widget type
+        }
+    }
+
+    function buildHaResultWidget(data) {
+        const domain = data.domain || 'device';
+        const devs = data.devices || [];
+        const action = data.action || '';
+        const applied = data.applied || {};
+        const iconMap = { light: '💡', switch: '⏻', fan: '🌀', scene: '🎬', script: '▶', group: '📦' };
+        const ico = iconMap[domain] || '⌂';
+        const wrap = document.createElement('div');
+        wrap.className = 'ha-block widget';
+        const header = document.createElement('div');
+        header.className = 'ha-block-header';
+        let stateWord = '';
+        if (action === 'turn_on') stateWord = 'on';
+        else if (action === 'turn_off') stateWord = 'off';
+        let appliedBits = [];
+        if (applied.color_name) appliedBits.push(applied.color_name);
+        if (applied.brightness_pct) appliedBits.push(applied.brightness_pct + '%');
+        const appliedText = appliedBits.length ? ' • ' + appliedBits.join(' @ ').replace(' @ %', '%') : '';
+        header.innerHTML = `<span class="ha-ico" aria-hidden="true">${ico}</span><span class="ha-h-text">${devs.length} ${domain}${devs.length === 1 ? '' : 's'} ${stateWord}${appliedText}</span>`;
+        wrap.appendChild(header);
+        const list = document.createElement('ul');
+        list.className = 'ha-dev-list';
+        if (!devs.length) {
+            const li = document.createElement('li');
+            li.className = 'empty';
+            li.textContent = 'No matching devices';
+            list.appendChild(li);
+        } else {
+            devs.forEach(d => {
+                const li = document.createElement('li');
+                const success = !!d.success;
+                const isOn = action === 'turn_on' || (action === 'multi' && d.requested_action === 'turn_on');
+                const stateLabel = success ? (isOn ? 'on' : 'off') : 'error';
+                const stateClass = success ? (isOn ? 'on' : 'off') : 'err';
+                let extra = '';
+                if (d.applied_color) {
+                    extra += `<span class="ha-mini-chip" style="--ha-chip-color:${d.applied_color}" title="${d.applied_color}"></span>`;
+                }
+                if (typeof d.applied_brightness_pct === 'number') {
+                    extra += `<span class="ha-mini-br">${d.applied_brightness_pct}%</span>`;
+                }
+                li.innerHTML = `<span class="nm" title="${d.entity_id}">${d.name || d.entity_id}</span><span class="st ${stateClass}"><span class="dot"></span>${stateLabel}</span>${extra}`;
+                list.appendChild(li);
+            });
+        }
+        wrap.appendChild(list);
+        if (applied.color_name) {
+            const colorChip = document.createElement('span');
+            colorChip.className = 'ha-color-chip';
+            colorChip.style.setProperty('--ha-chip-color', applied.color_name);
+            colorChip.title = applied.color_name + (applied.brightness_pct ? ` @ ${applied.brightness_pct}%` : '');
+            header.appendChild(colorChip);
+        }
+        return wrap;
+    }
+
+    function buildFunResultWidget(data) {
+        const wrap = document.createElement('div');
+        wrap.className = 'fun-block widget';
+        if (data.variant === 'self_destruct') {
+            wrap.innerHTML = `<div class="fun-self-destruct"><div class="fun-title">Self Destruct Sequence</div><div class="countdown" aria-live="polite"></div><div class="final" style="display:none"></div></div>`;
+            const cd = wrap.querySelector('.countdown');
+            const finalEl = wrap.querySelector('.final');
+            let remaining = data.countdown || 5;
+            cd.textContent = remaining + 's';
+            const interval = setInterval(() => {
+                remaining -= 1;
+                if (remaining <= 0) {
+                    clearInterval(interval);
+                    cd.style.display = 'none';
+                    finalEl.style.display = 'block';
+                    finalEl.textContent = data.finalText || '💥';
+                } else {
+                    cd.textContent = remaining + 's';
+                }
+            }, 1000);
+        } else if (data.variant === 'rainbow') {
+            wrap.innerHTML = `<div class="fun-rainbow"><div class="fun-title">Rainbow Lights</div><div class="sequence"></div><div class="done">${data.text || 'Done!'}</div></div>`;
+            const seq = wrap.querySelector('.sequence');
+            const colors = data.sequence || [];
+            colors.forEach((c,i) => {
+                const span = document.createElement('span');
+                span.className = 'fun-color';
+                span.style.background = c; span.title = c;
+                span.style.setProperty('--delay', i*0.15 + 's');
+                seq.appendChild(span);
+            });
+        } else {
+            wrap.textContent = data.text || 'Fun result';
+        }
+        return wrap;
+    }
 
     const settingsModal = document.getElementById('settings-modal');
     const closeModalBtn = document.querySelector('.close-modal');
@@ -778,21 +874,4 @@ document.addEventListener('DOMContentLoaded', function () {
     updateRateLimits();
 });
 
-// Lightweight keyboard handling: adjust container height to visible viewport
-let vvSupported = 'visualViewport' in window;
-function applyViewportResize() {
-    if (window.innerWidth > 1024) return;
-    const container = document.querySelector('.container');
-    if (!container) return;
-    let h = window.innerHeight;
-    if (vvSupported) h = window.visualViewport.height;
-    container.style.height = h + 'px';
-}
-if (vvSupported) {
-    window.visualViewport.addEventListener('resize', applyViewportResize);
-    window.visualViewport.addEventListener('scroll', applyViewportResize);
-} else {
-    window.addEventListener('resize', applyViewportResize);
-}
-queryInput.addEventListener('focus', applyViewportResize);
-queryInput.addEventListener('blur', function () { setTimeout(() => { document.querySelector('.container').style.height = '100vh'; }, 120); });
+// Lightweight keyboard handling moved inside DOMContentLoaded block above (removed dangling queryInput usage)

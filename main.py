@@ -24,6 +24,7 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, curren
 from authlib.integrations.flask_client import OAuth
 import contextlib
 import base64
+import math
 from cryptography.fernet import Fernet
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
@@ -219,14 +220,27 @@ class RateLimiter:
             conn.commit()
     
     def _cleanup_old_requests(self, ip: str, req_type: str, user_id: Optional[str] = None):
-        """Remove requests older than 1 month"""
+        """Remove requests older than 1 month and manage reset date.
+
+        IMPORTANT: Previously, the reset date was updated whenever a specific
+        request type (e.g., 'search') had zero recent usage. Because
+        get_limits() calls this cleanup for each req_type individually, the
+        reset date kept being set to 'now' for any category the user hadn't
+        used yet. That made the remaining time until reset appear to stick at
+        29 days forever.
+
+        Fix: Only update the reset date when the aggregate 'total' bucket has
+        zero recent requests. The 'total' pseudo-type is written alongside
+        every real request, so if it has zero recent entries it means all
+        categories are inactive and we can safely roll the window.
+        """
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            
+
             now = datetime.now()
             month_ago = now - timedelta(days=30)
             month_ago_str = month_ago.strftime("%Y-%m-%d %H:%M:%S")
-            
+
             if user_id:
                 cursor.execute('''
                 SELECT COUNT(*) FROM requests 
@@ -237,9 +251,9 @@ class RateLimiter:
                 SELECT COUNT(*) FROM requests 
                 WHERE ip = ? AND req_type = ? AND timestamp > ? AND user_id IS NULL
                 ''', (ip, req_type, month_ago_str))
-            
+
             recent_count = cursor.fetchone()[0]
-            
+
             if recent_count == 0:
                 if user_id:
                     cursor.execute('''
@@ -251,11 +265,6 @@ class RateLimiter:
                     DELETE FROM requests 
                     WHERE ip = ? AND req_type = ? AND user_id IS NULL
                     ''', (ip, req_type))
-                
-                cursor.execute('''
-                INSERT OR REPLACE INTO reset_dates (ip, reset_date) 
-                VALUES (?, ?)
-                ''', (ip, now.strftime("%Y-%m-%d %H:%M:%S")))
             else:
                 if user_id:
                     cursor.execute('''
@@ -267,27 +276,22 @@ class RateLimiter:
                     DELETE FROM requests 
                     WHERE ip = ? AND req_type = ? AND timestamp < ? AND user_id IS NULL
                     ''', (ip, req_type, month_ago_str))
-            
+
             conn.commit()
     
-    def _get_next_reset(self, ip: str) -> datetime:
-        """Get the next reset date for an IP's limits"""
+    def _get_next_reset(self, ip: str) -> Optional[datetime]:
+        """Return the next reset date or None if window not started.
+
+        The window start (stored in reset_dates) is created on the first request.
+        """
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            
-            cursor.execute('''
-            SELECT reset_date FROM reset_dates WHERE ip = ?
-            ''', (ip,))
-            
-            result = cursor.fetchone()
-            
-            if result:
-                last_reset = datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S")
-            else:
-                last_reset = datetime.now()
-                self._save_reset_date(ip, last_reset)
-            
-            return last_reset + timedelta(days=30)
+            cursor.execute('SELECT reset_date FROM reset_dates WHERE ip = ?', (ip,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            start = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S")
+            return start + timedelta(days=30)
     
     def _save_reset_date(self, ip: str, reset_date: datetime):
         """Save reset date to database"""
@@ -353,23 +357,36 @@ class RateLimiter:
         return (total_count < total_limit), (total_limit - total_count)
     
     def add_request(self, ip: str, req_type: str, user_id: Optional[str] = None):
-        """Record a new request in the database"""
+        """Record a new request and initialize/roll 30-day window if needed."""
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            
-            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
+            now_dt = datetime.now()
+            now_str = now_dt.strftime("%Y-%m-%d %H:%M:%S")
+
             cursor.execute('''
             INSERT INTO requests (ip, req_type, timestamp, user_id)
             VALUES (?, ?, ?, ?)
-            ''', (ip, req_type, now, user_id))
-            
+            ''', (ip, req_type, now_str, user_id))
+
             if req_type != "total":
                 cursor.execute('''
                 INSERT INTO requests (ip, req_type, timestamp, user_id)
                 VALUES (?, ?, ?, ?)
-                ''', (ip, "total", now, user_id))
-            
+                ''', (ip, "total", now_str, user_id))
+
+            cursor.execute('SELECT reset_date FROM reset_dates WHERE ip = ?', (ip,))
+            row = cursor.fetchone()
+            if not row:
+                cursor.execute('''
+                INSERT OR REPLACE INTO reset_dates (ip, reset_date) VALUES (?, ?)
+                ''', (ip, now_str))
+            else:
+                start = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S")
+                if now_dt - start >= timedelta(days=30):
+                    cursor.execute('''
+                    INSERT OR REPLACE INTO reset_dates (ip, reset_date) VALUES (?, ?)
+                    ''', (ip, now_str))
+
             conn.commit()
     
     def get_limits(self, ip: str, user_id: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
@@ -429,9 +446,40 @@ class RateLimiter:
                 total_count = cursor.fetchone()[0]
         
         next_reset = self._get_next_reset(ip)
-        reset_timestamp = int(next_reset.timestamp())
-        days_remaining = (next_reset - datetime.now()).days
-        
+        now_dt = datetime.now()
+
+        if next_reset and now_dt >= next_reset:
+            with get_db_connection() as conn2:
+                cur2 = conn2.cursor()
+                cur2.execute('DELETE FROM requests WHERE ip = ?', (ip,))
+                conn2.commit()
+            self._save_reset_date(ip, now_dt)
+            search_count = 0
+            weather_count = 0
+            total_count = 0
+            next_reset = self._get_next_reset(ip)
+
+        if next_reset is None:
+            reset_info = {
+                "started": False,
+                "timestamp": None,
+                "days_remaining": None,
+                "date": None
+            }
+        else:
+            diff = next_reset - now_dt
+            total_seconds = diff.total_seconds()
+            if total_seconds <= 0:
+                days_remaining = 30
+            else:
+                days_remaining = int(math.ceil(total_seconds / 86400.0))
+            reset_info = {
+                "started": True,
+                "timestamp": int(next_reset.timestamp()),
+                "days_remaining": days_remaining,
+                "date": next_reset.strftime("%Y-%m-%d")
+            }
+
         return {
             "search": {
                 "limit": search_limit,
@@ -448,11 +496,7 @@ class RateLimiter:
                 "remaining": total_limit - total_count,
                 "used": total_count
             },
-            "reset": {
-                "timestamp": reset_timestamp,
-                "days_remaining": days_remaining,
-                "date": next_reset.strftime("%Y-%m-%d")
-            }
+            "reset": reset_info
         }
 
 class SemanticParser:
@@ -502,16 +546,16 @@ class SemanticParser:
         
         self.greeting_phrases = [
             "hello", "hi", "hey", "howdy", "g'day", "greetings", 
-            "good morning", "good afternoon", "good evening"
+            "good morning", "good afternoon", "good evening", "good night"
         ]
         
         self.greeting_responses = [
-            "Hello to you too",
-            "Hi there",
-            "Hey",
-            "Nice to see you",
-            "Greetings",
-            "Hello"
+            "Hello to you too,",
+            "Hi there,",
+            "Hey,",
+            "Nice to see you,",
+            "Greetings,",
+            "Hello,"
         ]
         
         self.known_tools = {
@@ -523,6 +567,7 @@ class SemanticParser:
             "calculator": self._calculator_tool,
             "calc": self._calculator_tool,
             "homeassistant": self._home_assistant_tool,
+            "fun": self._fun_tool,
         }
         
         self.entity_types = {
@@ -912,11 +957,10 @@ class SemanticParser:
         if not action:
             tokens = re.findall(r"\b\w+\b", ql)
             for i, tok in enumerate(tokens):
-                if tok in self.ha_action_verbs and len(tok) > 2:  # avoid 'on'/'off' first
+                if tok in self.ha_action_verbs and len(tok) > 2: 
                     action = self.ha_action_verbs[tok]
                     break
             if not action:
-                # on/off alone
                 if re.search(r"\bturn\s+on\b|\bon\b", ql):
                     action = "turn_on"
                 elif re.search(r"\bturn\s+off\b|\boff\b", ql):
@@ -1004,10 +1048,17 @@ class SemanticParser:
                 user_name = None
             greeting_response = random.choice(self.greeting_responses)
             if user_name:
-                greeting_response = f"{greeting_response} {user_name}!"  # add name before follow-up
+                greeting_response = f"{greeting_response} {user_name}!"
             greeting_response += " How can I help you?"
             self._add_thought("Responding with greeting only", greeting_response)
             return greeting_response, self.thoughts, None
+
+        # Fun intent fast-path (jokes / good night / good morning etc.)
+        fun_indicators = ["joke", "fun", "laugh", "good morning", "good evening", "good night", "goodnight", "self destruct", "self-destruct", "rainbow"]
+        lower_q = query_lower
+        if any(ind in lower_q for ind in fun_indicators):
+            self._add_thought("Detected fun intent", [i for i in fun_indicators if i in lower_q])
+            pass
 
         if re.search(r"\b(what'?s|what is|tell me|say) (?:my )?name\b", query_lower):
             if current_user.is_authenticated:
@@ -1038,6 +1089,11 @@ class SemanticParser:
             elif "day" in query.lower():
                 tools.add("day")
                 self._add_thought("Inferred tool from context", "day")
+
+        # Inject fun tool if indicators present
+        if any(ind in query_lower for ind in ["joke", "good night", "goodnight", "good morning", "good evening", "self destruct", "self-destruct", "rainbow", "have fun"]):
+            tools.add("fun")
+            self._add_thought("Added fun tool", None)
 
         ha_detect = False
         for term in self.ha_domain_terms.keys():
@@ -1079,6 +1135,9 @@ class SemanticParser:
         if tools:
             self._add_thought("Preparing to execute tools", list(tools))
             responses = []
+            # Ensure fun tool has access to raw query text
+            if 'fun' in tools and 'search_query' not in entities:
+                entities['search_query'] = query
             for tool in tools:
                 if tool in self.known_tools:
                     tool_fn = self.known_tools[tool]
@@ -1258,7 +1317,7 @@ class SemanticParser:
                         c2.execute('UPDATE home_assistant_links SET access_token = ?, expires_at = ? WHERE user_id = ?', (encrypt_token(access_token), new_expires, current_user.id))
                         conn.commit()
             except Exception:
-                pass  # silent fallback
+                pass 
 
         action = entities.get('ha_action')
         domain = entities.get('ha_domain')
@@ -1300,7 +1359,6 @@ class SemanticParser:
         except Exception as e:
             return f"Error contacting Home Assistant: {e}"
 
-        # -------------------- Helpers --------------------
         color_words_all = ["warm white","cool white","magenta","yellow","purple","orange","white","green","blue","pink","cyan","red"]
 
         def detect_colors(text: str):
@@ -1308,7 +1366,6 @@ class SemanticParser:
             for cw in color_words_all:
                 if cw in text:
                     found.append(cw)
-            # de-dupe keep order
             seen = set(); ordered = []
             for c in found:
                 if c not in seen:
@@ -1325,7 +1382,6 @@ class SemanticParser:
             if re.search(r"\bmedium\b", text): return 60
             return None
 
-        # -------------- Multi-clause segmentation --------------
         segmentation_trigger = False
         if (' and ' in ql or ' then ' in ql) and domain == 'light':
             group_tokens = {'desk','accent','bed','drawer','under','above'}
@@ -1442,7 +1498,6 @@ class SemanticParser:
                     'devices': results,
                     'applied': {}
                 })
-            # else fall through to single-clause path using original query elements
 
         target_entity = None
         friendly = None
@@ -1498,8 +1553,6 @@ class SemanticParser:
         color_name = ordered_colors[0] if ordered_colors else None
         brightness_pct = detect_brightness(ql)
 
-        # If user specifies a color or brightness without an explicit action (on/off),
-        # assume they want the light(s) turned on.
         if (color_name or (brightness_pct is not None)) and not action:
             action = 'turn_on'
         if not action:
@@ -1597,12 +1650,155 @@ class SemanticParser:
             self._add_thought("Calculation error", str(e))
             return "There was an error evaluating that expression. Please check the syntax."
 
+    def _fun_tool(self, entities: Dict[str, Any]) -> str:
+        """Provide fun / playful interactions (jokes, greetings, light shows, self destruct). Returns either plain text or a composite widget JSON string."""
+        self._add_thought("Executing fun tool", None)
+        raw_query = entities.get("search_query") or ""
+        if not raw_query:
+            # fall back to last received query? already tracked in thoughts
+            raw_query = ""
+        q = raw_query.lower()
+
+        # Simple joke list
+        jokes = [
+            "Why did the web developer leave the restaurant? Because of the table layout.",
+            "I would tell you a UDP joke, but you might not get it.",
+            "Why do Java developers wear glasses? Because they don't C#.",
+            "I told my computer I needed a break, and it said 'No problem — I'll go to sleep.'",
+            "What do you call 8 hobbits? A hobbyte." ,
+        ]
+
+        def pick_joke():
+            import random
+            return random.choice(jokes)
+
+        # Base text pieces & potential widgets
+        base_text = None
+        widgets = []
+
+        # Greeting time-based niceties
+        now = datetime.now()
+        hour = now.hour
+        if "good morning" in q:
+            base_text = "Good morning! ☀️ Wishing you a productive day." if hour < 12 else "It's technically not morning anymore, but good day!" 
+        elif "good night" in q or "goodnight" in q:
+            base_text = "Good night! 🌙 Sleep well." if hour >= 18 else "It's a bit early, but have a relaxing evening anyway!" 
+        elif "good evening" in q:
+            base_text = "Good evening! 🌆" if 16 <= hour <= 23 else "It's not quite evening here, but hello!" 
+        elif "tell me a joke" in q or q.strip() == "joke" or "another joke" in q:
+            base_text = pick_joke()
+        elif "self destruct" in q or "self-destruct" in q:
+            # Self destruct widget: optional HA red/orange lights
+            base_text = "Initiating self destruct sequence..."  # countdown handled by widget client-side
+            countdown_seconds = 5
+            ha_payload = None
+            if current_user.is_authenticated:
+                # Attempt to set lights red/orange if HA linked by sending small HA actions via existing tool? We'll do direct minimal effect: return a nested instruction for frontend; backend will not duplicate HA logic to avoid complexity.
+                # Instead we try a quick direct HA call similar to _home_assistant_tool for all lights -> red/orange alternating.
+                try:
+                    with get_db_connection() as conn:
+                        cur = conn.cursor()
+                        cur.execute('SELECT base_url, access_token, refresh_token, expires_at FROM home_assistant_links WHERE user_id = ?', (current_user.id,))
+                        row = cur.fetchone()
+                    if row:
+                        base_url = row['base_url']
+                        access_token = decrypt_token(row['access_token'])
+                        resp = requests.get(f"{base_url}/api/states", headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}, timeout=5)
+                        if resp.status_code == 200:
+                            states = resp.json()
+                            light_entities = [s['entity_id'] for s in states if s.get('entity_id','').startswith('light.')]
+                            # Alternate colors for first few lights
+                            colors = ["red","orange"]
+                            for i,eid in enumerate(light_entities[:6]):
+                                color = colors[i % 2]
+                                try:
+                                    requests.post(f"{base_url}/api/services/light/turn_on", headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}, json={"entity_id": eid, "color_name": color, "brightness_pct": 70}, timeout=4)
+                                except Exception:
+                                    pass
+                except Exception:
+                    pass
+            widgets.append({
+                "type": "fun_result",
+                "variant": "self_destruct",
+                "countdown": countdown_seconds,
+                "finalText": "💥 BOOM! (All systems nominal — that was just for fun.)"
+            })
+        elif "rainbow" in q and ("light" in q or "lights" in q):
+            base_text = "Launching rainbow sequence 🌈"
+            # Rainbow sequence: capture current state? We'll just cycle colors then attempt restore best-effort.
+            if current_user.is_authenticated:
+                try:
+                    with get_db_connection() as conn:
+                        cur = conn.cursor()
+                        cur.execute('SELECT base_url, access_token FROM home_assistant_links WHERE user_id = ?', (current_user.id,))
+                        row = cur.fetchone()
+                    if row:
+                        base_url = row['base_url']
+                        access_token = decrypt_token(row['access_token'])
+                        resp = requests.get(f"{base_url}/api/states", headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}, timeout=5)
+                        if resp.status_code == 200:
+                            states = resp.json()
+                            light_entities = [s for s in states if s.get('entity_id','').startswith('light.')]
+                            # Save prior states (color + on/off) limited
+                            prior = []
+                            for s in light_entities[:8]:
+                                attrs = s.get('attributes',{})
+                                prior.append({
+                                    'entity_id': s['entity_id'],
+                                    'state': s.get('state'),
+                                    'color': attrs.get('rgb_color') or attrs.get('color_name'),
+                                    'brightness': attrs.get('brightness')
+                                })
+                            seq_colors = ["red","orange","yellow","green","blue","purple"]
+                            for color in seq_colors:
+                                for s in light_entities[:8]:
+                                    try:
+                                        requests.post(f"{base_url}/api/services/light/turn_on", headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}, json={"entity_id": s['entity_id'], "color_name": color, "brightness_pct": 75}, timeout=4)
+                                    except Exception:
+                                        pass
+                                time.sleep(0.4)
+                            # Restore: if was off turn off else approximate color
+                            for p in prior:
+                                try:
+                                    if p['state'] == 'off':
+                                        requests.post(f"{base_url}/api/services/light/turn_off", headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}, json={"entity_id": p['entity_id']}, timeout=4)
+                                    else:
+                                        restore_payload = {"entity_id": p['entity_id']}
+                                        if p['color'] and isinstance(p['color'], (list,tuple)) and len(p['color'])==3:
+                                            # rgb unsupported easily w/ color_name; skip
+                                            pass
+                                        elif isinstance(p['color'], str):
+                                            restore_payload['color_name'] = p['color']
+                                        if p['brightness']:
+                                            restore_payload['brightness'] = p['brightness']
+                                        requests.post(f"{base_url}/api/services/light/turn_on", headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}, json=restore_payload, timeout=4)
+                                except Exception:
+                                    pass
+                except Exception:
+                    pass
+            widgets.append({
+                "type": "fun_result",
+                "variant": "rainbow",
+                "sequence": ["red","orange","yellow","green","blue","purple"],
+                "text": "Rainbow cycle complete"
+            })
+        else:
+            # default fun fallback
+            base_text = pick_joke()
+
+        composite = {
+            "type": "composite",
+            "text": base_text,
+            "widgets": widgets
+        }
+        return json.dumps(composite)
+
 app = Flask(__name__, static_folder='static', template_folder='static')
 app.secret_key = SECRET_KEY
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['SESSION_COOKIE_SECURE'] = False  # ENSURE THIS IS TRUE FOR PRODUCTION
+app.config['SESSION_COOKIE_SECURE'] = False  # this should be true for production but who cares about security
 
 CORS(app, origins="*", supports_credentials=True)
 
@@ -2024,7 +2220,7 @@ def ha_start():
     session['ha_state'] = state
     session['ha_base_url'] = base_url
     callback_url = url_for('ha_callback', _external=True)
-    client_id = callback_url  # HA expects redirect URL as client_id
+    client_id = callback_url  # HA expects redirect URL as client_id for some stupid reason
     authorize_url = (
         f"{base_url}/auth/authorize?response_type=code&client_id="
         f"{requests.utils.quote(client_id, safe='')}"

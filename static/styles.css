@@ -2302,6 +2302,11 @@ select {
     transform: translateY(-50%);
 }
 
+/* Generic widget container (non-HA types can reuse) */
+.message .widget {
+    margin-top: 8px;
+}
+
 .ha-dev-list .ha-mini-chip {
     width: 10px;
     height: 10px;
@@ -2320,3 +2325,46 @@ select {
     font-weight: 500;
     vertical-align: middle;
 }
+
+.fun-block.widget {
+    background: #262626;
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-top: 10px;
+    font-size: 14px;
+    line-height: 1.4;
+    position: relative;
+}
+.fun-block .fun-title {
+    font-weight: 600;
+    margin-bottom: 6px;
+    font-size: 13px;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    color: #bbb;
+}
+.fun-block .countdown {
+    font-size: 32px;
+    font-weight: 700;
+    text-align: center;
+    margin: 8px 0;
+    animation: pulseScale 1s infinite;
+}
+@keyframes pulseScale {
+    0%,100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.15); opacity: .75; }
+}
+.fun-block .final {
+    text-align: center;
+    font-size: 20px;
+    animation: boomPop .5s ease;
+}
+@keyframes boomPop {
+    0% { transform: scale(.5); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+}
+.fun-rainbow .sequence { display:flex; gap:4px; margin:6px 0 10px; }
+.fun-rainbow .fun-color { width:18px; height:18px; border-radius:4px; animation: rainbowPulse 1.2s ease infinite; opacity:.85; }
+.fun-rainbow .fun-color:nth-child(n) { animation-delay: var(--delay); }
+@keyframes rainbowPulse { 0%,100% { transform:scale(1); } 50% { transform:scale(1.25); } }
