@@ -32,5 +32,5 @@ EXPOSE 3006
 
 # Run gunicorn
 # Explicitly calling python -m gunicorn to ensure path resolution
-CMD ["gunicorn", "--config", "gunicorn_config.py", "main:app"]
+CMD ["/usr/bin/python3", "-m", "gunicorn", "--config", "gunicorn_config.py", "main:app"]
 
