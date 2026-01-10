@@ -3,10 +3,10 @@ FROM python:3.12-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    DB_FILE=/app/data/neubot.db
+    DB_FILE=/app/neubot/data/neubot.db
 
 # Set work directory
-WORKDIR /app
+WORKDIR /app/neubot
 
 # Install system dependencies
 # gcc and python3-dev might be needed for some python packages
@@ -23,7 +23,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Create directory for persistent storage
-RUN mkdir -p /app/data
+RUN mkdir -p /app/neubot/data
 
 # Expose port
 EXPOSE 3006
