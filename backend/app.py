@@ -10,12 +10,16 @@ from backend.api.view_routes import view_bp
 from backend.api.developer_routes import developer_bp
 from backend.oauth2 import config_oauth
 import os
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 def create_app():
     # Adjust static_folder to point to the root static directory
     static_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'static'))
     app = Flask(__name__, static_folder=static_folder, template_folder=static_folder)
     
+    # Enable ProxyFix for proper URL generation behind reverse proxies (Coolify/Traefik)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
     app.config.from_object(Config)
     app.secret_key = Config.SECRET_KEY
     
