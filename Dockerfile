@@ -2,12 +2,13 @@
 FROM python:3.11-slim
 
 # Set working directory
-WORKDIR /app/neubot
+WORKDIR /neubot
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PORT=3006
+    PORT=3006 \
+    DB_FILE=/neubot/data/neubot.db
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
