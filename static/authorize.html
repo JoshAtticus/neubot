@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authorize App - neubot</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/ui-kit.css">
+    <style>
+        body { display: flex; align-items: center; justify-content: center; height: 100vh; background-color: var(--background-color); color: var(--text-primary); }
+        .auth-container { width: 100%; max-width: 400px; padding: 2rem; background: var(--surface-color); border-radius: 12px; border: 1px solid var(--border-color); text-align: center; }
+        .auth-actions { display: flex; gap: 1rem; justify-content: center; margin-top: 2rem; }
+        h1 { margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <h1>Authorize App</h1>
+        <p><strong>{{ client._client_metadata.get('client_name') }}</strong> wants to access your account.</p>
+        
+        <div class="scope-list">
+            <p>Access requested:</p>
+            <ul style="list-style: none; padding: 0; color: var(--text-secondary);">
+                <li>Read your profile and email</li>
+            </ul>
+        </div>
+
+        <form method="post">
+            <div class="auth-actions">
+                <button type="submit" name="confirm" value="true" class="button">Allow</button>
+                <button type="submit" name="confirm" value="" class="button button-ghost">Deny</button>
+            </div>
+        </form>
+    </div>
+</body>
+</html>

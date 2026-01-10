@@ -3,6 +3,14 @@
 neubot.db
 .codacy/codacy.yaml
 
-
 #Ignore vscode AI rules
 .github\copilot-instructions.md
+
+# ignore python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ignore macOS system files
+.DS_Store

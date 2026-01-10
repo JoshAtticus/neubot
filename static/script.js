@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const bannerDismissed = localStorage.getItem('neubot_banner_dismissed') === 'true';
     const welcomeModalSeen = localStorage.getItem('neubot_welcome_seen') === 'true';
-    const whatsNewModalSeen = localStorage.getItem('neubot_whats_new_20250906_seen') === 'true';
+    const whatsNewModalSeen = localStorage.getItem('neubot_whats_new_20260110_seen') === 'true';
 
     if (!welcomeModalSeen) {
         welcomeModal.style.display = 'block';
@@ -56,7 +56,7 @@ document.addEventListener('DOMContentLoaded', function () {
             setTimeout(() => {
                 whatsNewModal.style.display = 'none';
             }, 300);
-            localStorage.setItem('neubot_whats_new_20250906_seen', 'true');
+            localStorage.setItem('neubot_whats_new_20260110_seen', 'true');
         });
     }
 
@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', function () {
             setTimeout(() => {
                 whatsNewModal.style.display = 'none';
             }, 300);
-            localStorage.setItem('neubot_whats_new_20250906_seen', 'true');
+            localStorage.setItem('neubot_whats_new_20260110_seen', 'true');
 
             setTimeout(() => {
                 queryInput.focus();
@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', function () {
             setTimeout(() => {
                 whatsNewModal.style.display = 'none';
             }, 300);
-            localStorage.setItem('neubot_whats_new_20250906_seen', 'true');
+            localStorage.setItem('neubot_whats_new_20260110_seen', 'true');
         }
     });
 
@@ -115,7 +115,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 setTimeout(() => {
                     whatsNewModal.style.display = 'none';
                 }, 300);
-                localStorage.setItem('neubot_whats_new_20250906_seen', 'true');
+                localStorage.setItem('neubot_whats_new_20260110_seen', 'true');
             }
 
             setTimeout(() => {
@@ -236,7 +236,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                 }
 
-                addBotMessage(data.response, data.thoughts);
+                addBotMessage(data.response, data.thoughts, data.widgets);
 
                 scrollToBottom();
             })
@@ -269,16 +269,13 @@ document.addEventListener('DOMContentLoaded', function () {
         return messageDiv;
     }
 
-    function addBotMessage(text, thoughts) {
+    function addBotMessage(text, thoughts, serverWidgets = []) {
         const messageDiv = document.createElement('div');
         messageDiv.className = 'message bot';
 
         const stepsCount = thoughts.length;
         const detailsId = 'details-' + Date.now();
         const toggleId = 'toggle-' + Date.now();
-
-    // Generic widget parsing: supports multiple widget JSON payloads in one response
-    const { plainText, widgets, searchResults } = extractWidgets(text);
 
         const messageHTML = `
             <div class="bot-icon"><img src="neubot-icon.svg" alt="Bot"></div>
@@ -294,48 +291,24 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const messageContent = messageDiv.querySelector('.message-content');
 
-    if (plainText) {
+        if (text) {
             const textMessage = document.createElement('div');
             textMessage.className = 'message-text';
-            textMessage.innerHTML = plainText;
+            textMessage.innerHTML = text; // Server response is trusted enough for now
             messageContent.appendChild(textMessage);
         }
 
-        if (searchResults) {
-            const searchResultsDiv = document.createElement('div');
-            searchResultsDiv.innerHTML = formatSearchResults(searchResults);
-            messageContent.appendChild(searchResultsDiv);
-        }
-
-        // Render any other widgets
-        if (widgets && widgets.length) {
-            widgets.forEach(w => {
+        // Render widgets from serverWidgets array
+        serverWidgets.forEach(w => {
+            if (w.type === 'search_results') {
+                const searchResultsDiv = document.createElement('div');
+                searchResultsDiv.innerHTML = formatSearchResults(w.data);
+                messageContent.appendChild(searchResultsDiv);
+            } else {
                 const el = renderWidget(w);
                 if (el) messageContent.appendChild(el);
-            });
-        }
-
-        // HA widget builder (inline minimalist list)
-        function buildHaWidget(data) {
-            const wrap = document.createElement('div');
-            wrap.className = 'ha-devices-inline';
-            const ul = document.createElement('ul');
-            ul.className = 'ha-device-lines';
-            (data.devices || []).forEach(dev => {
-                const li = document.createElement('li');
-                li.innerHTML = `<span class="n">${dev.name || dev.entity_id}</span><span class="s ${dev.success ? 'ok' : 'err'}">${dev.success ? (data.action === 'turn_on' ? 'on' : 'off') : 'error'}</span>`;
-                ul.appendChild(li);
-            });
-            if (!ul.children.length) {
-                const li = document.createElement('li');
-                li.innerHTML = '<span class="n">No devices matched</span><span class="s err">—</span>';
-                ul.appendChild(li);
             }
-            wrap.appendChild(ul);
-            return wrap;
-        }
-
-        // Spotify track rendering removed (integration deprecated)
+        });
 
         const detailsElement = document.createElement('div');
         detailsElement.id = detailsId;
@@ -348,27 +321,29 @@ document.addEventListener('DOMContentLoaded', function () {
         displayThoughtProcess(thoughts, detailsElement);
 
         const toggleElement = document.getElementById(toggleId);
-        toggleElement.addEventListener('click', function () {
-            if (detailsElement.style.display === 'none') {
-                if (activeDetailsToggle && activeDetailsToggle !== toggleElement) {
-                    const activeDetailsId = activeDetailsToggle.getAttribute('data-details-id');
-                    if (activeDetailsId) {
-                        const activeDetails = document.getElementById(activeDetailsId);
-                        if (activeDetails) activeDetails.style.display = 'none';
-                        activeDetailsToggle.textContent = 'See details';
+        if (toggleElement) {
+            toggleElement.addEventListener('click', function () {
+                if (detailsElement.style.display === 'none') {
+                    if (activeDetailsToggle && activeDetailsToggle !== toggleElement) {
+                        const activeDetailsId = activeDetailsToggle.getAttribute('data-details-id');
+                        if (activeDetailsId) {
+                            const activeDetails = document.getElementById(activeDetailsId);
+                            if (activeDetails) activeDetails.style.display = 'none';
+                            activeDetailsToggle.textContent = 'See details';
+                        }
                     }
-                }
 
-                detailsElement.style.display = 'block';
-                toggleElement.textContent = 'Hide details';
-                toggleElement.setAttribute('data-details-id', detailsId);
-                activeDetailsToggle = toggleElement;
-            } else {
-                detailsElement.style.display = 'none';
-                toggleElement.textContent = 'See details';
-                activeDetailsToggle = null;
-            }
-        });
+                    detailsElement.style.display = 'block';
+                    toggleElement.textContent = 'Hide details';
+                    toggleElement.setAttribute('data-details-id', detailsId);
+                    activeDetailsToggle = toggleElement;
+                } else {
+                    detailsElement.style.display = 'none';
+                    toggleElement.textContent = 'See details';
+                    activeDetailsToggle = null;
+                }
+            });
+        }
 
         scrollToBottom();
     }
@@ -494,93 +469,47 @@ document.addEventListener('DOMContentLoaded', function () {
 
     addBotMessage('Hi! How can I help you?', []);
 
-    // --- Widget helper utilities ---
-    function extractWidgets(raw) {
-        let searchResults = null;
-        let plainText = raw;
-        const widgets = [];
-
-        // Fast path: whole string is a single JSON object
-        try {
-            const obj = JSON.parse(raw);
-            if (obj && obj.type) {
-                if (obj.type === 'search_results') {
-                    searchResults = obj; plainText = '';
-                } else if (obj.type === 'ha_result') {
-                    widgets.push(obj); plainText = obj.summary || '';
-                } else if (obj.type === 'composite') {
-                    if (Array.isArray(obj.widgets)) obj.widgets.forEach(w => widgets.push(w));
-                    plainText = obj.text || '';
-                }
-                return { plainText: plainText.trim(), widgets, searchResults };
-            }
-        } catch (_) { /* ignore */ }
-
-        // Balanced brace scanning for embedded objects preceded by text (e.g. 'Greetings, {...}')
-        const foundObjects = [];
-        for (let i = 0; i < raw.length; i++) {
-            if (raw[i] === '{') {
-                let depth = 0;
-                let inStr = false;
-                let esc = false;
-                for (let j = i; j < raw.length; j++) {
-                    const c = raw[j];
-                    if (inStr) {
-                        if (!esc && c === '"') inStr = false;
-                        esc = (!esc && c === '\\');
-                    } else {
-                        if (c === '"') { inStr = true; }
-                        else if (c === '{') depth++;
-                        else if (c === '}') {
-                            depth--;
-                            if (depth === 0) {
-                                const snippet = raw.slice(i, j + 1);
-                                try {
-                                    const obj = JSON.parse(snippet);
-                                    if (obj && obj.type) {
-                                        foundObjects.push({ obj, snippet });
-                                        i = j; // advance outer loop
-                                    }
-                                } catch (_) { /* not valid */ }
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        foundObjects.forEach(({ obj, snippet }) => {
-            if (obj.type === 'search_results' && !searchResults) {
-                searchResults = obj;
-                plainText = plainText.replace(snippet, ' ').trim();
-            } else if (obj.type === 'ha_result') {
-                widgets.push(obj);
-                plainText = plainText.replace(snippet, ' ').trim();
-            } else if (obj.type === 'composite') {
-                if (Array.isArray(obj.widgets)) obj.widgets.forEach(w => widgets.push(w));
-                if (obj.text) plainText = (plainText.replace(snippet, ' ') + ' ' + obj.text).trim();
-            }
-        });
-
-        // If a single HA widget and plainText ends with trailing comma/greeting punctuation, keep greeting text only
-        // If we have at least one widget and the plain text ends with a comma, drop the comma for cleaner look
-        let cleaned = plainText.trim();
-        if (widgets.length && /,\s*$/.test(cleaned)) {
-            cleaned = cleaned.replace(/,\s*$/, '');
-        }
-        return { plainText: cleaned, widgets, searchResults };
-    }
+    // extractWidgets removed - no longer needed
 
     function renderWidget(widget) {
+        // Backend now wraps content in 'data', logic below expects the content directly
+        const content = widget.data || widget; 
+        
         switch (widget.type) {
+            case 'home_assistant':
             case 'ha_result':
-                return buildHaResultWidget(widget);
+                return buildHaResultWidget(content);
             case 'fun_result':
-                return buildFunResultWidget(widget);
+                return buildFunResultWidget(content);
+            case 'weather':
+                return buildWeatherWidget(content);
             default:
-                return null; // Unknown widget type
+                return null; 
         }
+    }
+
+    function buildWeatherWidget(data) {
+        const wrap = document.createElement('div');
+        wrap.className = 'weather-block widget';
+        
+        // Basic weather display
+        const tempC = data.temperature.celsius;
+        const tempF = data.temperature.fahrenheit;
+        
+        wrap.innerHTML = `
+            <div class="weather-header">
+                <div class="weather-location">${data.location}</div>
+                <div class="weather-condition">${data.condition}</div>
+            </div>
+            <div class="weather-main">
+                <span class="weather-temp">${Math.round(tempC)}°C</span>
+                <span class="weather-sub"> / ${Math.round(tempF)}°F</span>
+            </div>
+            <div class="weather-details">
+                <span>Humidity: ${data.humidity}%</span>
+            </div>
+        `;
+        return wrap;
     }
 
     function buildHaResultWidget(data) {
@@ -699,6 +628,13 @@ document.addEventListener('DOMContentLoaded', function () {
         updateUserInfo();
     });
 
+    // Deep link: open settings if URL hash is #settings
+    if (window.location.hash === '#settings') {
+        settingsBtn.click();
+        // Clear the hash so it doesn't reopen on reload/back
+        history.replaceState('', document.title, window.location.pathname + window.location.search);
+    }
+
     closeModalBtn.addEventListener('click', () => {
         settingsModal.classList.remove('open');
         setTimeout(() => {
@@ -755,16 +691,6 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('weather-remaining').textContent = weatherRemaining;
             document.getElementById('weather-progress').style.width =
                 `${(weatherUsed / weatherLimit) * 100}%`;
-
-            const totalUsed = limits.total.used;
-            const totalLimit = limits.total.limit;
-            const totalRemaining = limits.total.remaining;
-
-            document.getElementById('total-used').textContent = totalUsed;
-            document.getElementById('total-limit').textContent = totalLimit;
-            document.getElementById('total-remaining').textContent = totalRemaining;
-            document.getElementById('total-progress').style.width =
-                `${(totalUsed / totalLimit) * 100}%`;
 
             document.getElementById('days-remaining').textContent = limits.reset.days_remaining;
 

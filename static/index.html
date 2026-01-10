@@ -7,6 +7,7 @@
     <meta name="viewport"
         content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no">
     <title>neubot</title>
+    <link rel="stylesheet" href="ui-kit.css">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
         crossorigin="anonymous">
@@ -50,8 +51,7 @@
             </div>
 
             <div class="legal-notice">
-                By using neubot you agree to the <a href="/legal/terms-of-service.html">Terms of Service</a> and <a
-                    href="/legal/privacy-policy.html">Privacy Policy</a>
+                By using neubot you agree to the <a href="/legal/terms-of-service.html">Terms of Service</a> and <a href="/legal/privacy-policy.html">Privacy Policy</a> | <a href="/docs" > API Documentation</a> | <a href="/developer.html" > Developer Portal</a>
             </div>
 
             <div id="thinking-process"></div>
@@ -108,6 +108,14 @@
                                     <span class="toggle-slider"></span>
                                 </label>
                             </div>
+
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <h4>Show Mode <span class="beta-tag">BETA</span></h4>
+                                    <p>Add neubot to your smart display or tablet</p>
+                                </div>
+                                <a href="/show.html" class="login-button">Open</a>
+                            </div>
                         </div>
                     </div>
 
@@ -145,18 +153,6 @@
                             <p>Your limits will reset in <span id="days-remaining">-</span> day(s). Limits do not roll
                                 over, any remaining queries at the end of the month will be discarded.</p>
                         </div>
-                        <div class="rate-limit-card">
-                            <h4>Total Queries</h4>
-                            <div class="progress-bar">
-                                <div class="progress" id="total-progress"></div>
-                            </div>
-                            <div class="limit-stats">
-                                <span id="total-used">0</span> / <span id="total-limit">1000</span> requests
-                            </div>
-                            <div class="limit-remaining">
-                                <span id="total-remaining">1000</span> remaining this month
-                            </div>
-                        </div>
                         <div class="rate-limits-container">
                             <div class="rate-limit-card">
                                 <h4>Search</h4>
@@ -190,7 +186,7 @@
                         <div class="about-content">
                             <div class="about-section">
                                 <h4>Version</h4>
-                                <p>2025.09.06</p>
+                                <p>2026.01.10</p>
                             </div>
                             <div class="about-section">
                                 <h4>Legal</h4>
@@ -260,10 +256,9 @@
                         <i class="fas fa-question-circle"></i> "What day is it and what time is it?"
                     </div>
                 </div>
-
-                <div class="welcome-footer">
-                    <button id="welcome-start-button" class="welcome-button">Get Started</button>
-                </div>
+            </div>
+            <div class="welcome-footer">
+                <button id="welcome-start-button" class="welcome-button">Get Started</button>
             </div>
         </div>
     </div>
@@ -278,12 +273,15 @@
             <div class="welcome-body">
                 <p>We've made neubot even more useful!</p>
                 <ul>
-                    <li><b>Rate limits actually work now</b> - Been unable to use neubot because your ratelimits never rolled over? Sorry about that, we fixed it.</li>
-                    <li><b>More natural greetings</b> - The last update broke greetings, which we fixed with this update</li>
-                    <li><b>Fun is here!</b> - Say hello to the new fun features in neubot, bad jokes, self-destruct sequence etc</li>
+                    <li><b>Unlimited General Queries</b> - General Queries are no longer subject to monthly rate limits.</li>
+                    <li><b>More Natural Responses</b> - Responses are now friendlier and easier to read.</li>
+                    <li><b>Improved Home Assistant Support</b> - You can now check if devices are on or off.</li>
+                    <li><b>Revamped API</b> - Our new API makes using neubot in your app even easier! Widgets are now accessible from the API and we simplified the login process.</li>
+                    <li><b>Modular Codebase</b> - We've completely refactored our codebase for modularity, ease of maintenance, and scalability.</li>
+                    <li><b>Developer Resources</b> - Get started with our new API and integrate neubot into your app with our new API Documentation and Developer Portal</li>
                 </ul>
 
-                <h3>Try these new capabilities:</h3>
+                <!-- <h3>Try these new capabilities:</h3>
                 <div class="example-questions">
                     <div class="example-question" data-question="Self destruct">
                         <i class="fas fa-fire"></i> "Self destruct"
@@ -291,11 +289,10 @@
                     <div class="example-question" data-question="Tell me a joke">
                         <i class="fas fa-face-laugh-squint"></i> "Tell me a joke"
                     </div>
-                </div>
-
-                <div class="welcome-footer">
-                    <button id="whats-new-got-it-button" class="welcome-button">Got it!</button>
-                </div>
+                </div> -->
+            </div>
+            <div class="welcome-footer">
+                <button id="whats-new-got-it-button" class="welcome-button">Got it!</button>
             </div>
         </div>
     </div>

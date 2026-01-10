@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rate Limits API - neubot docs</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="../ui-kit.css">
+    <link rel="icon" href="../neubot-icon.svg" type="image/svg+xml">
+    <style>code, pre { background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 4px; font-family: monospace; } pre { padding: 16px; overflow-x: auto; }</style>
+</head>
+<body>
+    <div class="container">
+        <div class="header-container">
+            <h1>neubot docs</h1>
+            <a href="index.html" class="back-link">Back to Docs</a>
+        </div>
+        <div class="legal-content">
+            <h1>Rate Limits API</h1>
+            
+            <div class="legal-section">
+                <h2>Endpoint</h2>
+                <code>GET /api/limits</code>
+            </div>
+
+            <div class="legal-section">
+                <h2>Headers</h2>
+                <ul>
+                    <li><code>Cookie</code>: <strong>Required.</strong> Must include <code>session=...</code> (captured from browser login).</li>
+                    <li><code>Accept</code>: <code>application/json</code></li>
+                </ul>
+            </div>
+
+            <div class="legal-section">
+                <h2>Description</h2>
+                <p>Retrieves the current usage and limits for the user (or IP address if guest).</p>
+                <p><strong>Note:</strong> Total query limits have been removed. Limits only apply to specific tools.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2>Response Schema</h2>
+                <div class="code-block-wrapper">
+                    <pre>{
+  "search": {                    // Limits for 'search' actions (Brave API)
+    "used": int,                 // Requests made this month
+    "limit": int,                // Max requests allowed
+    "remaining": int             // limit - used
+  },
+  "weather": {                   // Limits for 'weather' actions (OpenWeatherMap)
+    "used": int,
+    "limit": int,
+    "remaining": int
+  },
+  "total": {                     // DEPRECATED. Legacy field.
+    "used": int,
+    "limit": int,
+    "remaining": int
+  },
+  "reset": {                     // Reset schedule information
+      "started": boolean,        // Whether usage tracking has started
+      "timestamp": int|null,     // Unix timestamp of next reset
+      "days_remaining": int|null,// Days until next reset
+      "date": string|null        // YYYY-MM-DD string of next reset
+  }
+}</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

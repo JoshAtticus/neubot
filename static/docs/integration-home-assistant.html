@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Integration - Home Assistant - neubot docs</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="icon" href="../neubot-icon.svg" type="image/svg+xml">
+</head>
+<body>
+    <div class="container">
+        <div class="header-container">
+            <h1>neubot docs</h1>
+            <a href="index.html" class="back-link">Back to Docs</a>
+        </div>
+        <div class="legal-content">
+            <h1>Exposing Home Assistant to the Internet</h1>
+            <p>neubot requires that your Home Assistant instance is externally accessible. Below are the recommended methods.</p>
+
+            <div class="legal-section">
+                <h2>1. Home Assistant Cloud (Easy)</h2>
+                <p><em>Requires Payment (Nabu Casa subscription)</em></p>
+                <p>1. Open Home Assistant Settings > Home Assistant Cloud.</p>
+                <p>2. Enable Remote Control.</p>
+                <p>3. Copy your specific Nabu Casa URL.</p>
+                <p>Use this URL in the neubot integrations page.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2>2. Cloudflared Addon (Recommended)</h2>
+                <p><em>Difficulty: Moderate. Requires free Cloudflare account + Domain.</em></p>
+                <h3>Requirements</h3>
+                <ul>
+                    <li>Free Cloudflare Account</li>
+                    <li>Domain name connected to Cloudflare</li>
+                    <li>Home Assistant with Addons support</li>
+                </ul>
+                <h3>Steps</h3>
+                <ol>
+                    <li>Install the <strong>Cloudflared</strong> addon in Home Assistant.</li>
+                    <li>Configure the addon with your domain (e.g. <code>ha.example.com</code>).</li>
+                    <li>Start the addon and check the logs for the authentication URL.</li>
+                    <li>Visit the URL to authorize the tunnel with Cloudflare.</li>
+                    <li>Add the <code>trusted_proxies</code> config to your <code>configuration.yaml</code>:</li>
+                </ol>
+                <pre style="background:rgba(255,255,255,0.1);padding:10px;border-radius:5px;">
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 172.30.33.0/24</pre>
+                <p>6. Restart Home Assistant.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2>3. Port Forwarding (Not Recommended)</h2>
+                <p><strong>Caution:</strong> Exposing port 8123 directly is a security risk.</p>
+                <p>If you have a public IP, you can forward port 8123 on your router to your Home Assistant IP.</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

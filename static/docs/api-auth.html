@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication API - neubot docs</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="../ui-kit.css">
+    <link rel="icon" href="../neubot-icon.svg" type="image/svg+xml">
+    <style>code, pre { background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 4px; font-family: monospace; } pre { padding: 16px; overflow-x: auto; }</style>
+</head>
+<body>
+    <div class="container">
+        <div class="header-container">
+            <h1>neubot docs</h1>
+            <a href="index.html" class="back-link">Back to Docs</a>
+        </div>
+        <div class="legal-content">
+            <h1>Authentication API</h1>
+            <p>Neubot uses OAuth2 for authentication with Google and GitHub.</p>
+
+            <div class="legal-section">
+                <h2>Authentication Types</h2>
+                <p>Neubot currently primarily supports <strong>Session-based Authentication</strong> (Cookies). There is no persistent API Key mechanism for third-party applications at this time.</p>
+                
+                <h3>Integration for Third-Party Apps</h3>
+                <p>To authenticate a custom application (e.g., mobile app, CLI) against the Neubot API:</p>
+                <ol>
+                    <li>Open a webview or browser window pointing to <code>/api/auth/login/google</code> (or github).</li>
+                    <li>Allow the user to complete the OAuth flow in the browser.</li>
+                    <li>Upon successful login, the server will set a <code>session</code> cookie on the response.</li>
+                    <li><strong>Capture and store this cookie.</strong></li>
+                    <li>Include this <code>session</code> cookie in the <code>Cookie</code> header of all subsequent API requests.</li>
+                </ol>
+            </div>
+
+            <div class="legal-section">
+                <h2>Login Endpoints</h2>
+                
+                <h3><code>GET /auth/login/google</code></h3>
+                <p>Redirects the user to Google's OAuth consent screen.</p>
+
+                <h3><code>GET /auth/login/github</code></h3>
+                <p>Redirects the user to GitHub's OAuth consent screen.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2>Logout</h2>
+                <h3><code>GET /auth/logout</code></h3>
+                <p>Clears the user session and redirects to the home page.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2>Flow</h2>
+                <ol>
+                    <li>User clicks login button in UI (hitting <code>/login</code> -> <code>views.login_page</code>).</li>
+                    <li>Frontend redirects to one of the endpoints above.</li>
+                    <li>Server redirects to Provider.</li>
+                    <li>Provider redirects back to <code>/auth/google</code> or <code>/auth/github</code> with a code.</li>
+                    <li>Server exchanges code for token, creates/updates user in DB, and sets session cookie.</li>
+                    <li>User is redirected to <code>/</code>.</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

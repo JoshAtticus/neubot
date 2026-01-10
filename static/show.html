@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>neubot — Show Mode</title>
+  <link rel="stylesheet" href="/ui-kit.css" />
+  <link rel="stylesheet" href="/show.css" />
+  <!-- Font Awesome (Free) for icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="icon" href="/neubot-icon.svg" type="image/svg+xml" />
+</head>
+<body class="show-mode-body">
+  <div id="show-root" class="show-root">
+    <!-- Left panel: Dashboard -->
+  <section class="panel panel-dashboard" data-panel="dashboard" aria-label="Dashboard">
+      <div class="dash-header">
+        <img src="neubot-icon.svg" alt="neubot" class="dash-logo" />
+        <h2>Dashboard</h2>
+      </div>
+      <div class="dash-content">
+        <!-- Tabs -->
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="account"><i class="fa-solid fa-user"></i><span>Account</span></button>
+          <button class="tab-btn" data-tab="settings"><i class="fa-solid fa-gear"></i><span>Settings</span></button>
+        </div>
+
+        <!-- Tab Panels -->
+        <div class="tab-panels">
+          <!-- Account Tab -->
+          <div class="tab-panel active" id="tab-account" role="region" aria-label="Account">
+            <div class="account-card">
+              <div class="account-avatar">
+                <img id="dash-user-avatar" src="user-icon.svg" alt="User" />
+              </div>
+              <div class="account-info">
+                <div id="dash-user-name" class="account-name">Account</div>
+                <div id="dash-user-email" class="account-email">Sign in for increased limits</div>
+              </div>
+              <div class="account-actions">
+                <button id="dash-signin" class="button outline"><i class="fa-solid fa-right-to-bracket"></i><span> Sign in</span></button>
+              </div>
+            </div>
+
+            <div class="limits">
+              <h3>Rate limits</h3>
+              <div class="limit-row">
+                <div class="limit-label">Search</div>
+                <div class="limit-bar"><span id="dash-search-bar"></span></div>
+                <div class="limit-stats"><span id="dash-search-used">0</span>/<span id="dash-search-limit">0</span></div>
+              </div>
+              <div class="limit-row">
+                <div class="limit-label">Weather</div>
+                <div class="limit-bar"><span id="dash-weather-bar"></span></div>
+                <div class="limit-stats"><span id="dash-weather-used">0</span>/<span id="dash-weather-limit">0</span></div>
+              </div>
+              <div class="limit-reset">Resets in <span id="dash-reset-days">-</span> day(s)</div>
+            </div>
+          </div>
+
+          <!-- Settings Tab -->
+          <div class="tab-panel" id="tab-settings" role="region" aria-label="Settings">
+            <div class="limits" aria-label="Show Mode Settings">
+              <h3>Show Mode Settings</h3>
+              <div class="limit-row" style="grid-template-columns: 200px 1fr;">
+                <div>Clock format</div>
+                <div>
+                  <select id="show-hour-format" class="show-input">
+                    <option value="12">12‑hour (4:45 PM)</option>
+                    <option value="24">24‑hour (16:45)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="limit-row" style="grid-template-columns: 200px 1fr;">
+                <div>Default room</div>
+                <div>
+                  <input id="show-default-room" class="show-input" type="text" placeholder="e.g. Office" />
+                  <div class="hint">Used when a lights command has no room or device specified.</div>
+                </div>
+              </div>
+              <div class="limit-row" style="grid-template-columns: 200px 1fr;">
+                <div>Background</div>
+                <label style="display:flex;align-items:center;gap:8px">
+                  <input id="show-bg-follow-room" type="checkbox" />
+                  <span>Match room light colors</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="dash-actions">
+              <button id="exit-show-mode" class="button danger"><i class="fa-solid fa-arrow-left"></i><span> Exit Show Mode</span></button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Center panel: Show main -->
+    <section class="panel panel-main" data-panel="main" aria-label="Show Mode">
+      <div class="main-clock" aria-live="polite">
+        <div id="clock-time" class="clock-time">--:--</div>
+        <div id="clock-date" class="clock-date">---</div>
+      </div>
+
+  <div id="show-big-message" class="show-big-message" aria-live="polite" role="log"></div>
+
+  <div id="show-response" class="show-response" role="log" aria-live="polite"></div>
+    </section>
+
+    <!-- Right panel: Quick actions -->
+    <section class="panel panel-quick" data-panel="quick" aria-label="Quick Actions">
+      <div class="quick-header">
+        <h2>Quick Actions</h2>
+  <button id="add-action" class="icon-btn" title="Add action"><i class="fa-solid fa-plus"></i></button>
+      </div>
+      <div id="pinned-actions" class="action-grid" aria-label="Pinned actions"></div>
+      <div class="quick-sub">
+        <h3>All Actions</h3>
+        <div id="all-actions" class="action-list"></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Bottom query bar (global) -->
+  <div class="show-query">
+    <div class="avatar">
+      <img id="show-user-avatar" src="user-icon.svg" alt="User" />
+    </div>
+    <input type="text" id="show-query-input" placeholder="Ask neubot..." />
+    <button id="show-send" class="send-btn" title="Send"><span>Send</span></button>
+  </div>
+
+  <!-- Modal: Create/Edit action -->
+  <div id="action-modal" class="show-modal" aria-hidden="true">
+    <div class="show-modal-content" role="dialog" aria-modal="true" aria-labelledby="action-modal-title">
+      <div class="show-modal-header">
+        <h3 id="action-modal-title">Quick Action</h3>
+        <button id="action-modal-close" class="icon-btn">×</button>
+      </div>
+      <div class="show-modal-body">
+        <label>Name
+          <input id="qa-name" type="text" placeholder="e.g. Desk off" />
+        </label>
+        <label>Icon
+          <div class="icon-picker-row">
+            <div id="qa-icon-preview" class="icon-preview">💡</div>
+            <input id="qa-icon" type="text" placeholder="emoji or fa-bolt" />
+            <button id="qa-pick-fa" type="button" class="button outline"><i class="fa-solid fa-icons"></i><span> Pick FA</span></button>
+          </div>
+        </label>
+        <label>Commands (one per line)
+          <textarea id="qa-commands" rows="5" placeholder="turn my desk lights off"></textarea>
+        </label>
+        <label class="row">
+          <input id="qa-pinned" type="checkbox" /> Pin to grid (max 8)
+        </label>
+      </div>
+      <div class="show-modal-footer">
+        <button id="qa-delete" class="button danger" style="margin-right:auto; display:none;">Delete</button>
+        <button id="qa-save" class="button">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Icon Picker -->
+  <div id="icon-picker-modal" class="show-modal" aria-hidden="true">
+    <div class="show-modal-content" role="dialog" aria-modal="true" aria-labelledby="icon-picker-title">
+      <div class="show-modal-header">
+        <h3 id="icon-picker-title">Choose an icon</h3>
+        <button id="icon-picker-close" class="icon-btn">×</button>
+      </div>
+      <div class="icon-grid" id="icon-grid" aria-label="Font Awesome icons"></div>
+    </div>
+  </div>
+
+  <!-- Confirm Modal -->
+  <div id="confirm-modal" class="show-modal" aria-hidden="true">
+    <div class="show-modal-content" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+      <div class="show-modal-header">
+        <h3 id="confirm-title">Confirm</h3>
+        <button id="confirm-close" class="icon-btn">×</button>
+      </div>
+      <div class="show-modal-body">
+        <div id="confirm-message">Are you sure?</div>
+      </div>
+      <div class="show-modal-footer">
+        <button id="confirm-cancel" class="button outline">Cancel</button>
+        <button id="confirm-ok" class="button">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toasts -->
+  <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="/show.js"></script>
+</body>
+</html>
