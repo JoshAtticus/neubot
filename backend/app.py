@@ -13,31 +13,23 @@ import os
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 def create_app():
-    # Adjust static_folder to point to the root static directory
     static_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'static'))
     app = Flask(__name__, static_folder=static_folder, template_folder=static_folder)
-    
-    # Enable ProxyFix for proper URL generation behind reverse proxies (Coolify/Traefik)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
-
     app.config.from_object(Config)
     app.secret_key = Config.SECRET_KEY
     
-    # Session config
     app.config['SESSION_TYPE'] = 'filesystem'
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-    app.config['SESSION_COOKIE_SECURE'] = False # Set to True in production
+    app.config['SESSION_COOKIE_SECURE'] = True
 
-    # OAuth2 Provider Config
     config_oauth(app)
     
-    # Initialize extensions
     CORS(app, origins="*", supports_credentials=True)
     login_manager.init_app(app)
     oauth.init_app(app)
     
-    # Register OAuth providers
     oauth.register(
         name='google',
         client_id=Config.GOOGLE_CLIENT_ID,
