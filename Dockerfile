@@ -3,13 +3,12 @@ FROM python:3.12-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    DB_FILE=/app/neubot/data/neubot.db
+    DB_FILE=/neubot/data/neubot.db
 
 # Set work directory
-WORKDIR /app/neubot
+WORKDIR /neubot
 
 # Install system dependencies
-# gcc and python3-dev might be needed for some python packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
@@ -19,15 +18,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project
+# Copy project files
 COPY . .
 
 # Create directory for persistent storage
-RUN mkdir -p /app/neubot/data
+RUN mkdir -p /neubot/data
+
+# Ensure the database directory is writable
+RUN chmod 777 /neubot/data
 
 # Expose port
 EXPOSE 3006
 
 # Run gunicorn
-# Using the config file we modified earlier
-CMD ["gunicorn", "--config", "gunicorn_config.py", "main:app"]
+# Explicitly calling python -m gunicorn to ensure path resolution
+CMD ["python", "-m", "gunicorn", "--config", "gunicorn_config.py", "main:app"]
+
