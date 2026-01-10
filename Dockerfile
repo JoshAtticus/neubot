@@ -1,37 +1,35 @@
-FROM python:3.12-slim
+# Use Python 3.11 slim image for smaller size
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app/neubot
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    DB_FILE=/neubot/data/neubot.db
-
-# Set work directory
-WORKDIR /neubot
+    PORT=3006
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    python3-dev \
-    python3-pip \
+    libjpeg-dev \
+    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install python dependencies
+# Copy requirements first for better layer caching
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Copy project files
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
 COPY . .
 
-# Create directory for persistent storage
-RUN mkdir -p /neubot/data
+# Create necessary directories
+RUN mkdir -p templates posts/assets
 
-# Ensure the database directory is writable
-RUN chmod 777 /neubot/data
-
-# Expose port
+# Expose port 3006
 EXPOSE 3006
 
-# Run gunicorn
-# Explicitly calling python -m gunicorn to ensure path resolution
-CMD ["/usr/bin/python3", "-m", "gunicorn", "--config", "gunicorn_config.py", "main:app"]
-
+# Run gunicorn with 4 workers
+CMD ["gunicorn", "--bind", "0.0.0.0:3006", "--workers", "4", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "wsgi:app"]
