@@ -51,7 +51,8 @@
             </div>
 
             <div class="legal-notice">
-                By using neubot you agree to the <a href="/legal/terms-of-service.html">Terms of Service</a> and <a href="/legal/privacy-policy.html">Privacy Policy</a> | <a href="/docs" > API Documentation</a> | <a href="/developer.html" > Developer Portal</a>
+                By using neubot you agree to the <a href="/legal/terms-of-service.html">Terms of Service</a> and <a
+                    href="/legal/privacy-policy.html">Privacy Policy</a> | <a href="/docs"> API Documentation</a>
             </div>
 
             <div id="thinking-process"></div>
@@ -105,6 +106,17 @@
                                 </div>
                                 <label class="toggle-switch">
                                     <input type="checkbox" id="send-button-toggle">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <h4>Use Fahrenheit</h4>
+                                    <p>Toggle between Celsius and Fahrenheit for weather display</p>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="temp-unit-toggle">
                                     <span class="toggle-slider"></span>
                                 </label>
                             </div>
@@ -186,7 +198,7 @@
                         <div class="about-content">
                             <div class="about-section">
                                 <h4>Version</h4>
-                                <p>2026.01.10</p>
+                                <p>2026.01.11</p>
                             </div>
                             <div class="about-section">
                                 <h4>Legal</h4>
@@ -273,23 +285,26 @@
             <div class="welcome-body">
                 <p>We've made neubot even more useful!</p>
                 <ul>
-                    <li><b>Unlimited General Queries</b> - General Queries are no longer subject to monthly rate limits.</li>
-                    <li><b>More Natural Responses</b> - Responses are now friendlier and easier to read.</li>
-                    <li><b>Improved Home Assistant Support</b> - You can now check if devices are on or off.</li>
-                    <li><b>Revamped API</b> - Our new API makes using neubot in your app even easier! Widgets are now accessible from the API and we simplified the login process.</li>
-                    <li><b>Modular Codebase</b> - We've completely refactored our codebase for modularity, ease of maintenance, and scalability.</li>
-                    <li><b>Developer Resources</b> - Get started with our new API and integrate neubot into your app with our new API Documentation and Developer Portal</li>
+                    <li><b>Weather Widget</b> - Weather requests now have a dedicated widget for cleaner presentation.
+                    </li>
+                    <li><b>Temperature Units</b> - You can now set your preferred temperature unit (Celsius or
+                        Fahrenheit) in settings.</li>
+                    <li><b>Fixed Query Highlighting</b> - Query highlighting is now functional again.</li>
+                    <li><b>Show Mode [BETA]</b> - Try the beautiful new Show Mode with large fonts and a clean interface
+                        designed for tablets and smart displays.</li>
+                    <li><b>Improved API Documentation</b> - The API documentation is now cleaner and easier to
+                        understand with a better overall layout.</li>
+                    <li><b>Removal Of Developer Portal</b> - The Developer Portal for creating OAuth apps has been
+                        removed, reverting to the previous system. Apps can now use Authorization Bearer headers with
+                        user tokens instead of cookies.</li>
                 </ul>
 
-                <!-- <h3>Try these new capabilities:</h3>
+                <h3>Try these new capabilities:</h3>
                 <div class="example-questions">
-                    <div class="example-question" data-question="Self destruct">
-                        <i class="fas fa-fire"></i> "Self destruct"
+                    <div class="example-question" data-question="What's the weather in Seattle?">
+                        <i class="fas fa-cloud"></i> "What's the weather in Seattle?"
                     </div>
-                    <div class="example-question" data-question="Tell me a joke">
-                        <i class="fas fa-face-laugh-squint"></i> "Tell me a joke"
-                    </div>
-                </div> -->
+                </div>
             </div>
             <div class="welcome-footer">
                 <button id="whats-new-got-it-button" class="welcome-button">Got it!</button>

@@ -19,13 +19,14 @@ document.addEventListener('DOMContentLoaded', function () {
     let highlightEnabled = false;
     let sendButtonEnabled = false;
     let isUserAuthenticated = false;
+    let userTempUnit = null;
     let initialWindowHeight = window.innerHeight;
     let visualViewportSupported = 'visualViewport' in window;
     let isAndroid = /Android/i.test(navigator.userAgent);
 
     const bannerDismissed = localStorage.getItem('neubot_banner_dismissed') === 'true';
     const welcomeModalSeen = localStorage.getItem('neubot_welcome_seen') === 'true';
-    const whatsNewModalSeen = localStorage.getItem('neubot_whats_new_20260110_seen') === 'true';
+    const whatsNewModalSeen = localStorage.getItem('neubot_whats_new_20260111_seen') === 'true';
 
     if (!welcomeModalSeen) {
         welcomeModal.style.display = 'block';
@@ -56,7 +57,7 @@ document.addEventListener('DOMContentLoaded', function () {
             setTimeout(() => {
                 whatsNewModal.style.display = 'none';
             }, 300);
-            localStorage.setItem('neubot_whats_new_20260110_seen', 'true');
+            localStorage.setItem('neubot_whats_new_20260111_seen', 'true');
         });
     }
 
@@ -66,7 +67,7 @@ document.addEventListener('DOMContentLoaded', function () {
             setTimeout(() => {
                 whatsNewModal.style.display = 'none';
             }, 300);
-            localStorage.setItem('neubot_whats_new_20260110_seen', 'true');
+            localStorage.setItem('neubot_whats_new_20260111_seen', 'true');
 
             setTimeout(() => {
                 queryInput.focus();
@@ -80,7 +81,7 @@ document.addEventListener('DOMContentLoaded', function () {
             setTimeout(() => {
                 whatsNewModal.style.display = 'none';
             }, 300);
-            localStorage.setItem('neubot_whats_new_20260110_seen', 'true');
+            localStorage.setItem('neubot_whats_new_20260111_seen', 'true');
         }
     });
 
@@ -115,7 +116,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 setTimeout(() => {
                     whatsNewModal.style.display = 'none';
                 }, 300);
-                localStorage.setItem('neubot_whats_new_20260110_seen', 'true');
+                localStorage.setItem('neubot_whats_new_20260111_seen', 'true');
             }
 
             setTimeout(() => {
@@ -157,6 +158,14 @@ document.addEventListener('DOMContentLoaded', function () {
         const savedSendButton = localStorage.getItem('neubot_send_button_enabled');
         sendButtonEnabled = savedSendButton === 'true';
 
+        const savedTemp = localStorage.getItem('neubot_temp_unit');
+        if (savedTemp) {
+            userTempUnit = savedTemp;
+        } else {
+            const lang = navigator.language || 'en-US';
+            userTempUnit = (lang === 'en-US') ? 'f' : 'c';
+        }
+
         const highlightToggle = document.getElementById('highlight-toggle');
         if (highlightToggle) {
             highlightToggle.checked = highlightEnabled;
@@ -165,6 +174,11 @@ document.addEventListener('DOMContentLoaded', function () {
         const sendButtonToggle = document.getElementById('send-button-toggle');
         if (sendButtonToggle) {
             sendButtonToggle.checked = sendButtonEnabled;
+        }
+
+        const tempToggle = document.getElementById('temp-unit-toggle');
+        if (tempToggle) {
+            tempToggle.checked = (userTempUnit === 'f');
         }
 
         updateSendButtonVisibility();
@@ -493,8 +507,15 @@ document.addEventListener('DOMContentLoaded', function () {
         wrap.className = 'weather-block widget';
         
         // Basic weather display
-        const tempC = data.temperature.celsius;
-        const tempF = data.temperature.fahrenheit;
+        const tempC = Math.round(data.temperature.celsius);
+        const tempF = Math.round(data.temperature.fahrenheit);
+        
+        let tempDisplay = '';
+        if (userTempUnit === 'f') {
+            tempDisplay = `<span class="weather-temp">${tempF}°F</span>`;
+        } else {
+            tempDisplay = `<span class="weather-temp">${tempC}°C</span>`;
+        }
         
         wrap.innerHTML = `
             <div class="weather-header">
@@ -502,8 +523,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 <div class="weather-condition">${data.condition}</div>
             </div>
             <div class="weather-main">
-                <span class="weather-temp">${Math.round(tempC)}°C</span>
-                <span class="weather-sub"> / ${Math.round(tempF)}°F</span>
+                ${tempDisplay}
             </div>
             <div class="weather-details">
                 <span>Humidity: ${data.humidity}%</span>
@@ -710,6 +730,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
             isUserAuthenticated = userInfo.authenticated;
 
+            if (isUserAuthenticated && userInfo.user && userInfo.user.temp_unit) {
+                userTempUnit = userInfo.user.temp_unit;
+            } else {
+                 const stored = localStorage.getItem('neubot_temp_unit');
+                 if (stored) {
+                     userTempUnit = stored;
+                 } else {
+                     const lang = navigator.language || 'en-US';
+                     userTempUnit = (lang === 'en-US') ? 'f' : 'c';
+                 }
+            }
+
+            const tempToggle = document.getElementById('temp-unit-toggle');
+            if (tempToggle) {
+                 tempToggle.checked = (userTempUnit === 'f');
+            }
+
             if (userProfileImg) {
                 if (isUserAuthenticated && userInfo.user.profile_pic) {
                     userProfileImg.src = userInfo.user.profile_pic;
@@ -798,6 +835,26 @@ document.addEventListener('DOMContentLoaded', function () {
 
     updateUserInfo();
     updateRateLimits();
-});
 
-// Lightweight keyboard handling moved inside DOMContentLoaded block above (removed dangling queryInput usage)
+    const tempUnitToggle = document.getElementById('temp-unit-toggle');
+    if (tempUnitToggle) {
+        tempUnitToggle.addEventListener('change', async function () {
+            const unit = this.checked ? 'f' : 'c';
+            userTempUnit = unit;
+            
+            // Save locally immediately for visual consistency
+            localStorage.setItem('neubot_temp_unit', unit);
+
+            // If authenticated, sync with server
+            if (isUserAuthenticated) {
+                 try {
+                     await fetch('/api/show-settings', {
+                         method: 'POST',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify({ temp_unit: unit })
+                     });
+                 } catch(e) { console.error('Error saving temp unit', e); }
+            }
+        });
+    }
+});

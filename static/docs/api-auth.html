@@ -1,67 +1,148 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Authentication API - neubot docs</title>
+    <title>Authentication API - neubot</title>
     <link rel="stylesheet" href="../styles.css">
     <link rel="stylesheet" href="../ui-kit.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+        crossorigin="anonymous">
     <link rel="icon" href="../neubot-icon.svg" type="image/svg+xml">
-    <style>code, pre { background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 4px; font-family: monospace; } pre { padding: 16px; overflow-x: auto; }</style>
+    <style>
+        .docs-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 0.95em;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid var(--color-border-medium);
+        }
+
+        th {
+            background-color: var(--color-background-secondary);
+            font-weight: 600;
+        }
+
+        code {
+            background: var(--color-background-secondary);
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        
+        pre {
+            background: var(--color-background-secondary);
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+
+        .method {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .get { background-color: rgba(61, 169, 252, 0.1); color: #3da9fc; }
+        .post { background-color: rgba(43, 203, 186, 0.1); color: #2bcbba; }
+    </style>
 </head>
+
 <body>
-    <div class="container">
-        <div class="header-container">
-            <h1>neubot docs</h1>
-            <a href="index.html" class="back-link">Back to Docs</a>
+    <div class="docs-container">
+        <a href="index.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to Docs</a>
+        
+        <h1>Authentication API</h1>
+        <p>Neubot uses JSON Web Tokens (JWT) for API authentication. This allows you to securely access protected endpoints from your applications.</p>
+
+        <h2>Authentication Flow</h2>
+        <p>To obtain an API token for a user, you must initiate an OAuth2 login flow with Neubot.</p>
+        
+        <ol>
+            <li>Redirect the user to the Neubot App Login endpoint with your detailed callback URL.</li>
+            <li>The user signs in with their preferred provider (Google/GitHub).</li>
+            <li>Neubot redirects the user back to your <code>callbackURL</code> with a <code>token</code> parameter appended (or replacing <code>[TOKEN]</code>).</li>
+        </ol>
+
+        <hr>
+
+        <h2>Endpoints</h2>
+
+        <h3><span class="method get">GET</span> Initiate App Login</h3>
+        <p>Starts the authentication process.</p>
+        
+        <div class="endpoint">
+            <code>https://neubot.joshattic.us/login/app/</code>
         </div>
-        <div class="legal-content">
-            <h1>Authentication API</h1>
-            <p>Neubot uses OAuth2 for authentication with Google and GitHub.</p>
 
-            <div class="legal-section">
-                <h2>Authentication Types</h2>
-                <p>Neubot currently primarily supports <strong>Session-based Authentication</strong> (Cookies). There is no persistent API Key mechanism for third-party applications at this time.</p>
-                
-                <h3>Integration for Third-Party Apps</h3>
-                <p>To authenticate a custom application (e.g., mobile app, CLI) against the Neubot API:</p>
-                <ol>
-                    <li>Open a webview or browser window pointing to <code>/api/auth/login/google</code> (or github).</li>
-                    <li>Allow the user to complete the OAuth flow in the browser.</li>
-                    <li>Upon successful login, the server will set a <code>session</code> cookie on the response.</li>
-                    <li><strong>Capture and store this cookie.</strong></li>
-                    <li>Include this <code>session</code> cookie in the <code>Cookie</code> header of all subsequent API requests.</li>
-                </ol>
-            </div>
+        <h4>Parameters</h4>
+        <table>
+            <thead>
+                <tr>
+                    <th>Parameter</th>
+                    <th>Type</th>
+                    <th>Required</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>callbackURL</code></td>
+                    <td>string</td>
+                    <td>Yes</td>
+                    <td>The URL to redirect the user to after successful login. You must include a <code>[TOKEN]</code> placeholder which will be replaced by the actual JWT.</td>
+                </tr>
+            </tbody>
+        </table>
 
-            <div class="legal-section">
-                <h2>Login Endpoints</h2>
-                
-                <h3><code>GET /auth/login/google</code></h3>
-                <p>Redirects the user to Google's OAuth consent screen.</p>
+        <h4>Example</h4>
+        <pre><code>https://neubot.joshattic.us/login/app/?callbackURL=https://myapp.com/callback?token=[TOKEN]</code></pre>
 
-                <h3><code>GET /auth/login/github</code></h3>
-                <p>Redirects the user to GitHub's OAuth consent screen.</p>
-            </div>
+        <hr>
 
-            <div class="legal-section">
-                <h2>Logout</h2>
-                <h3><code>GET /auth/logout</code></h3>
-                <p>Clears the user session and redirects to the home page.</p>
-            </div>
+        <h2>Using the Token</h2>
+        <p>Once you have the token, you must include it in the headers of your API requests.</p>
 
-            <div class="legal-section">
-                <h2>Flow</h2>
-                <ol>
-                    <li>User clicks login button in UI (hitting <code>/login</code> -> <code>views.login_page</code>).</li>
-                    <li>Frontend redirects to one of the endpoints above.</li>
-                    <li>Server redirects to Provider.</li>
-                    <li>Provider redirects back to <code>/auth/google</code> or <code>/auth/github</code> with a code.</li>
-                    <li>Server exchanges code for token, creates/updates user in DB, and sets session cookie.</li>
-                    <li>User is redirected to <code>/</code>.</li>
-                </ol>
-            </div>
-        </div>
+        <h3>Headers</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Header</th>
+                    <th>Value Format</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>Authorization</code></td>
+                    <td><code>Bearer &lt;your_token&gt;</code></td>
+                    <td>Standard Bearer token authentication (Preferred).</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h4>Example Request</h4>
+        <pre><code>curl -X POST https://neubot.joshattic.us/api/query \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1..." \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Hello"}'</code></pre>
+
     </div>
 </body>
 </html>

@@ -23,6 +23,7 @@ HA_ACTION_VERBS = {
     "stop": "turn_off",
     "on": "turn_on",
     "off": "turn_off",
+    "set": "turn_on",
 }
 
 HA_DOMAIN_TERMS = {
@@ -80,6 +81,9 @@ def extract_ha_entities(query: str, thought_logger: Callable[[str, Any], None]) 
     # Check for state inquiries
     if re.search(r"^\s*(is|are)\b.*\b(on|off)\b", ql) or "status" in ql or re.search(r"\b(check|what)\b.*\b(is|are)\b", ql):
         action = "get_state"
+
+    if not action and re.search(r"\bset\b.*\b(off|stop|disable)\b", ql):
+        action = "turn_off"
 
     if not action:
         for phrase, canonical in HA_ACTION_VERBS.items():
@@ -222,14 +226,15 @@ def execute_ha_tool(entities: Dict[str, Any], thought_logger: Callable[[str, Any
     ql = query.lower()
 
     now_ts = int(time.time())
-    if expires_at and expires_at < now_ts - 30 and refresh_token:
+    # Refresh if expires in less than 5 minutes (300s) or already expired
+    if expires_at and expires_at < now_ts + 300 and refresh_token:
         try:
             token_resp = requests.post(
                 f"{base_url}/auth/token",
                 data={
                     'grant_type': 'refresh_token',
                     'refresh_token': refresh_token,
-                    'client_id': url_for('ha_callback', _external=True)
+                    'client_id': url_for('api.ha_callback', _external=True)
                 }, timeout=10
             )
             if token_resp.status_code == 200:

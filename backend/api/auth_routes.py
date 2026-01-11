@@ -3,6 +3,7 @@ from flask_login import login_user, logout_user, current_user
 from backend.extensions import oauth
 from backend.database import get_db_connection
 from backend.models.user import User
+from backend.security import generate_api_token
 import secrets
 from urllib.parse import urlparse
 from datetime import datetime
@@ -186,7 +187,7 @@ def auth_app_google_callback():
             )
             conn.commit()
 
-    app_token = generate_app_token(user_id)
+    app_token = generate_api_token(user_id)
     return redirect(callback_url.replace('[TOKEN]', app_token))
 
 @auth_bp.route('/auth/app/github/callback')
@@ -208,10 +209,10 @@ def auth_app_github_callback():
         conn.commit()
 
     token = oauth.github.authorize_access_token()
-    resp = oauth.github.get('https://api.github.com/user')
+    resp = oauth.github.get('https://api.github.com/user', token=token)
     user_info = resp.json()
     
-    email_resp = oauth.github.get('https://api.github.com/user/emails')
+    email_resp = oauth.github.get('https://api.github.com/user/emails', token=token)
     emails = email_resp.json()
     primary_email = next((email['email'] for email in emails if email['primary']),
                          emails[0]['email'] if emails else 'no-email@example.com')
@@ -228,16 +229,6 @@ def auth_app_github_callback():
             )
             conn.commit()
 
-    app_token = generate_app_token(user_id)
+    app_token = generate_api_token(user_id)
     return redirect(callback_url.replace('[TOKEN]', app_token))
 
-def generate_app_token(user_id):
-    token = secrets.token_urlsafe(32)
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO app_tokens (token, user_id, created_at) VALUES (?, ?, ?)",
-            (token, user_id, datetime.now())
-        )
-        conn.commit()
-    return token

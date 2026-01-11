@@ -37,49 +37,7 @@ def init_db():
         )
         ''')
 
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS api_clients (
-            client_id TEXT PRIMARY KEY,
-            client_secret TEXT NOT NULL,
-            user_id TEXT NOT NULL,
-            client_metadata TEXT NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-        ''')
 
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS oauth2_codes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            code TEXT UNIQUE NOT NULL,
-            client_id TEXT NOT NULL,
-            user_id TEXT NOT NULL,
-            redirect_uri TEXT,
-            response_type TEXT,
-            scope TEXT,
-            nonce TEXT,
-            auth_time INTEGER NOT NULL,
-            code_challenge TEXT,
-            code_challenge_method TEXT,
-            FOREIGN KEY (client_id) REFERENCES api_clients (client_id),
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-        ''')
-
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS oauth2_tokens (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            client_id TEXT NOT NULL,
-            user_id TEXT NOT NULL,
-            access_token TEXT UNIQUE NOT NULL,
-            refresh_token TEXT UNIQUE,
-            scope TEXT,
-            revoked INTEGER DEFAULT 0,
-            issued_at INTEGER NOT NULL,
-            expires_in INTEGER NOT NULL,
-            FOREIGN KEY (client_id) REFERENCES api_clients (client_id),
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-        ''')
         
         # Migration checks
         cursor.execute("PRAGMA table_info(home_assistant_links)")
@@ -149,5 +107,13 @@ def init_db():
         
         if 'user_id' not in column_names:
             cursor.execute('ALTER TABLE requests ADD COLUMN user_id TEXT')
+            
+        # Migration for show_settings table
+        cursor.execute("PRAGMA table_info(show_settings)")
+        columns = cursor.fetchall()
+        column_names = [column[1] for column in columns]
+        
+        if 'temp_unit' not in column_names:
+            cursor.execute("ALTER TABLE show_settings ADD COLUMN temp_unit TEXT DEFAULT 'c'")
         
         conn.commit()

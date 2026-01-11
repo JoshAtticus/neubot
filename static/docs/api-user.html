@@ -1,57 +1,119 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>User API - neubot docs</title>
+    <title>User API - neubot</title>
     <link rel="stylesheet" href="../styles.css">
     <link rel="stylesheet" href="../ui-kit.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+        crossorigin="anonymous">
     <link rel="icon" href="../neubot-icon.svg" type="image/svg+xml">
-    <style>code, pre { background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 4px; font-family: monospace; } pre { padding: 16px; overflow-x: auto; }</style>
+    <style>
+        .docs-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 0.95em;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid var(--color-border-medium);
+        }
+
+        th {
+            background-color: var(--color-background-secondary);
+            font-weight: 600;
+        }
+
+        code {
+            background: var(--color-background-secondary);
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        
+        pre {
+            background: var(--color-background-secondary);
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+
+        .method {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .get { background-color: rgba(61, 169, 252, 0.1); color: #3da9fc; }
+        .post { background-color: rgba(43, 203, 186, 0.1); color: #2bcbba; }
+    </style>
 </head>
+
 <body>
-    <div class="container">
-        <div class="header-container">
-            <h1>neubot docs</h1>
-            <a href="index.html" class="back-link">Back to Docs</a>
+    <div class="docs-container">
+        <a href="index.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to Docs</a>
+        
+        <h1>User API</h1>
+        <p>Get information about the currently authenticated user.</p>
+
+        <hr>
+
+        <h2>Endpoints</h2>
+
+        <h3><span class="method get">GET</span> Get Current User</h3>
+        <p>Returns profile information for the token owner.</p>
+        
+        <div class="endpoint">
+            <code>https://neubot.joshattic.us/api/user</code>
         </div>
-        <div class="legal-content">
-            <h1>User API</h1>
-            
-            <div class="legal-section">
-                <h2>Endpoint</h2>
-                <code>GET /api/user</code>
-            </div>
-            
-            <div class="legal-section">
-                <h2>Headers</h2>
-                <ul>
-                    <li><code>Cookie</code>: Required (session cookie) for <code>authenticated: true</code> responses.</li>
-                    <li><code>Accept</code>: <code>application/json</code></li>
-                </ul>
-            </div>
 
-            <div class="legal-section">
-                <h2>Description</h2>
-                <p>Retrieves information about the currently authenticated session.</p>
-            </div>
+        <h4>Headers</h4>
+        <table>
+            <thead>
+                <tr>
+                    <th>Header</th>
+                    <th>Value</th>
+                    <th>Required</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>Authorization</code></td>
+                    <td><code>Bearer &lt;token&gt;</code></td>
+                    <td>Yes</td>
+                    <td>Authentication token.</td>
+                </tr>
+            </tbody>
+        </table>
 
-            <div class="legal-section">
-                <h2>Response Schema</h2>
-                <div class="code-block-wrapper">
-                    <pre>{
-  "authenticated": boolean,      // (Required) top-level status
-  "user": {                      // (Optional) Only present if authenticated=true
-    "id": string,                // (Required) Unique user ID (e.g. "google_123")
-    "name": string,              // (Optional) User's display name
-    "email": string,             // (Optional) User's email
-    "provider": string,          // (Required) "google" or "github"
-    "profile_pic": string        // (Optional) URL to avatar image
+        <h4>Response Schema</h4>
+        <pre>{
+  "authenticated": true,
+  "user": {
+    "id": "google_123456789",    // Unique User ID
+    "name": "John Doe",          // Display Name
+    "email": "john@example.com", // Email Address
+    "provider": "google",        // Identity Provider
+    "profile_pic": "https://..." // Avatar URL
   }
 }</pre>
-                </div>
-            </div>
-        </div>
+
     </div>
 </body>
 </html>

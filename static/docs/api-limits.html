@@ -1,71 +1,127 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rate Limits API - neubot docs</title>
+    <title>Rate Limits API - neubot</title>
     <link rel="stylesheet" href="../styles.css">
     <link rel="stylesheet" href="../ui-kit.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+        crossorigin="anonymous">
     <link rel="icon" href="../neubot-icon.svg" type="image/svg+xml">
-    <style>code, pre { background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 4px; font-family: monospace; } pre { padding: 16px; overflow-x: auto; }</style>
+    <style>
+        .docs-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 0.95em;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid var(--color-border-medium);
+        }
+
+        th {
+            background-color: var(--color-background-secondary);
+            font-weight: 600;
+        }
+
+        code {
+            background: var(--color-background-secondary);
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        
+        pre {
+            background: var(--color-background-secondary);
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+
+        .method {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .get { background-color: rgba(61, 169, 252, 0.1); color: #3da9fc; }
+        .post { background-color: rgba(43, 203, 186, 0.1); color: #2bcbba; }
+    </style>
 </head>
+
 <body>
-    <div class="container">
-        <div class="header-container">
-            <h1>neubot docs</h1>
-            <a href="index.html" class="back-link">Back to Docs</a>
+    <div class="docs-container">
+        <a href="index.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to Docs</a>
+        
+        <h1>Rate Limits API</h1>
+        <p>Check your current usage and remaining quota for various Neubot services.</p>
+
+        <hr>
+
+        <h2>Endpoints</h2>
+
+        <h3><span class="method get">GET</span> Check Limits</h3>
+        <p>Retrieves the current usage statistics.</p>
+        
+        <div class="endpoint">
+            <code>https://neubot.joshattic.us/api/limits</code>
         </div>
-        <div class="legal-content">
-            <h1>Rate Limits API</h1>
-            
-            <div class="legal-section">
-                <h2>Endpoint</h2>
-                <code>GET /api/limits</code>
-            </div>
 
-            <div class="legal-section">
-                <h2>Headers</h2>
-                <ul>
-                    <li><code>Cookie</code>: <strong>Required.</strong> Must include <code>session=...</code> (captured from browser login).</li>
-                    <li><code>Accept</code>: <code>application/json</code></li>
-                </ul>
-            </div>
+        <h4>Headers</h4>
+        <table>
+            <thead>
+                <tr>
+                    <th>Header</th>
+                    <th>Value</th>
+                    <th>Required</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>Authorization</code></td>
+                    <td><code>Bearer &lt;token&gt;</code></td>
+                    <td>No (for IP based limits, required for user-specific limits)</td>
+                    <td>Authentication token</td>
+                </tr>
+            </tbody>
+        </table>
 
-            <div class="legal-section">
-                <h2>Description</h2>
-                <p>Retrieves the current usage and limits for the user (or IP address if guest).</p>
-                <p><strong>Note:</strong> Total query limits have been removed. Limits only apply to specific tools.</p>
-            </div>
-
-            <div class="legal-section">
-                <h2>Response Schema</h2>
-                <div class="code-block-wrapper">
-                    <pre>{
+        <h4>Response Schema</h4>
+        <pre>{
   "search": {                    // Limits for 'search' actions (Brave API)
-    "used": int,                 // Requests made this month
-    "limit": int,                // Max requests allowed
-    "remaining": int             // limit - used
+    "used": 12,                  // Requests made this month
+    "limit": 100,                // Max requests allowed
+    "remaining": 88              // limit - used
   },
   "weather": {                   // Limits for 'weather' actions (OpenWeatherMap)
-    "used": int,
-    "limit": int,
-    "remaining": int
-  },
-  "total": {                     // DEPRECATED. Legacy field.
-    "used": int,
-    "limit": int,
-    "remaining": int
+    "used": 5,
+    "limit": 50,
+    "remaining": 45
   },
   "reset": {                     // Reset schedule information
-      "started": boolean,        // Whether usage tracking has started
-      "timestamp": int|null,     // Unix timestamp of next reset
-      "days_remaining": int|null,// Days until next reset
-      "date": string|null        // YYYY-MM-DD string of next reset
+      "started": true,           // Whether usage tracking has started
+      "timestamp": 1709251200,   // Unix timestamp of next reset
+      "days_remaining": 15,      // Days until next reset
+      "date": "2024-03-01"       // YYYY-MM-DD string of next reset
   }
 }</pre>
-                </div>
-            </div>
-        </div>
+
     </div>
 </body>
 </html>

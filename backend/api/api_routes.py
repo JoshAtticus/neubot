@@ -48,6 +48,22 @@ def get_rate_limits():
 
 @api_bp.route('/user', methods=['GET'])
 def get_user_info():
+    temp_unit = None
+    user_id = None
+    
+    if current_user.is_authenticated:
+        user_id = current_user.id
+    else:
+        user_id = get_request_user_id()
+    
+    if user_id:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('SELECT temp_unit FROM show_settings WHERE user_id = ?', (user_id,))
+            row = cur.fetchone()
+            if row and row['temp_unit']:
+                temp_unit = row['temp_unit']
+
     if current_user.is_authenticated:
         return jsonify({
             "authenticated": True,
@@ -56,11 +72,11 @@ def get_user_info():
                 "name": current_user.name,
                 "email": current_user.email,
                 "provider": current_user.provider,
-                "profile_pic": current_user.profile_pic
+                "profile_pic": current_user.profile_pic,
+                "temp_unit": temp_unit
             }
         })
     else:
-        user_id = get_request_user_id()
         if user_id:
             user = User.get(user_id)
             if user:
@@ -71,11 +87,15 @@ def get_user_info():
                         "name": user.name,
                         "email": user.email,
                         "provider": user.provider,
-                        "profile_pic": user.profile_pic
+                        "profile_pic": user.profile_pic,
+                        "temp_unit": temp_unit
                     }
                 })
         return jsonify({
-            "authenticated": False
+            "authenticated": False,
+             "user": {
+                "temp_unit": temp_unit
+            }
         })
 
 @api_bp.route('/show-settings', methods=['GET','POST'])
@@ -83,33 +103,58 @@ def show_settings_api():
     user_id = get_request_user_id()
     if request.method == 'GET':
         if not user_id:
-            return jsonify({"hour_format":"12","default_room":"","bg_follow_room":False})
+            return jsonify({"hour_format":"12","default_room":"","bg_follow_room":False, "temp_unit":None})
         with get_db_connection() as conn:
             cur = conn.cursor()
-            cur.execute('SELECT hour_format, default_room, bg_follow_room FROM show_settings WHERE user_id = ?', (user_id,))
+            cur.execute('SELECT hour_format, default_room, bg_follow_room, temp_unit FROM show_settings WHERE user_id = ?', (user_id,))
             row = cur.fetchone()
             if not row:
-                return jsonify({"hour_format":"12","default_room":"","bg_follow_room":False})
+                return jsonify({"hour_format":"12","default_room":"","bg_follow_room":False, "temp_unit":None})
             return jsonify({
                 "hour_format": row['hour_format'] or '12',
                 "default_room": row['default_room'] or '',
-                "bg_follow_room": bool(row['bg_follow_room'])
+                "bg_follow_room": bool(row['bg_follow_room']),
+                "temp_unit": row['temp_unit']
             })
     else:
         if not user_id:
             return jsonify({"error":"not_authenticated"}), 200
         data = request.json or {}
-        hour = str(data.get('hour_format') or '12')
-        room = (data.get('default_room') or '').strip()
-        bg = 1 if data.get('bg_follow_room') else 0
+        
+        # Fetch existing settings to merge partial updates
+        existing = {}
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('SELECT hour_format, default_room, bg_follow_room, temp_unit FROM show_settings WHERE user_id = ?', (user_id,))
+            row = cur.fetchone()
+            if row:
+                existing = dict(row)
+
+        hour = str(data.get('hour_format') or existing.get('hour_format') or '12')
+        room = (data.get('default_room') if 'default_room' in data else existing.get('default_room') or '').strip()
+        
+        # bg_follow_room: check key presence because False/0 is valid
+        if 'bg_follow_room' in data:
+            bg = 1 if data['bg_follow_room'] else 0
+        else:
+            bg = existing.get('bg_follow_room', 0)
+
+        # temp_unit
+        if 'temp_unit' in data:
+            temp = str(data['temp_unit'] or 'c').lower()
+        else:
+            temp = existing.get('temp_unit', 'c')
+            
+        if temp not in ['c', 'f']: temp = 'c'
+        
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute('''
-            INSERT INTO show_settings (user_id, hour_format, default_room, bg_follow_room, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(user_id) DO UPDATE SET hour_format=excluded.hour_format, default_room=excluded.default_room, bg_follow_room=excluded.bg_follow_room, updated_at=excluded.updated_at
-            ''', (user_id, hour, room, bg, now_str))
+            INSERT INTO show_settings (user_id, hour_format, default_room, bg_follow_room, updated_at, temp_unit)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET hour_format=excluded.hour_format, default_room=excluded.default_room, bg_follow_room=excluded.bg_follow_room, updated_at=excluded.updated_at, temp_unit=excluded.temp_unit
+            ''', (user_id, hour, room, bg, now_str, temp))
             conn.commit()
         return jsonify({"ok":True})
 

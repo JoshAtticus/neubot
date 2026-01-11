@@ -148,12 +148,36 @@ class SemanticParser:
                 found_tools.add("homeassistant")
                 self._add_thought("Inferred Home Assistant tool from verbs/domains", None)
 
-        for phrase in self.search_indicator_phrases:
+        # Logic to determine if we should fallback to search
+        # If we already have specific tools (weather, time, calculator, etc),
+        # strictly reserve search for EXPLICIT search commands.
+        explicit_search = False
+        generic_search_intent = False
+
+        explicit_search_phrases = ["search for", "search", "look up", "find"]
+        generic_search_phrases = ["what is", "who is", "where is", "when is", "tell me about"]
+
+        for phrase in explicit_search_phrases:
             if lowered.startswith(phrase) or f" {phrase} " in lowered:
-                if "search" not in found_tools:
-                    found_tools.add("search")
-                    self._add_thought("Inferred search tool from phrase", phrase)
+                explicit_search = True
+                self._add_thought("Explicit search requested", phrase)
                 break
+        
+        if not explicit_search:
+             for phrase in generic_search_phrases:
+                if lowered.startswith(phrase) or f" {phrase} " in lowered:
+                    generic_search_intent = True
+                    break
+
+        if explicit_search:
+            if "search" not in found_tools:
+                found_tools.add("search")
+        elif generic_search_intent:
+            # Only add search if NO other tools found
+            if not found_tools and "search" not in found_tools:
+                found_tools.add("search")
+                self._add_thought("Inferred search tool from generic phrase (no other tools found)", generic_search_intent)
+                
         return found_tools
 
     def _extract_entities(self, query: str, tools: Set[str]) -> Dict[str, Any]:
@@ -363,31 +387,63 @@ class SemanticParser:
             return f"Sorry, there was an error retrieving weather information for {location}.", []
     
     def _highlight_query(self, query: str, location: Optional[str] = None) -> str:
-        result = query
-        
+        # Use single pass replacement to avoid nesting tags
         query_indicators = ["what", "what's", "how", "when", "where", "who", "why", "is", "can", "tell", "show", "calculate", "compute", "solve"]
-        for indicator in query_indicators:
-            pattern = fr'\b{indicator}\b'
-            result = re.sub(pattern, f'<span class="query-indicator">{indicator}</span>', result, flags=re.IGNORECASE)
-        
         tools = ["time", "weather", "date", "day", "calculator", "calc"]
-        for tool in tools:
-            pattern = fr'\b{tool}\b'
-            result = re.sub(pattern, f'<span class="tool-reference">{tool}</span>', result, flags=re.IGNORECASE)
-        
         math_operators = ["plus", "minus", "times", "divided by", "multiplied by"]
-        for operator in math_operators:
-            pattern = fr'\b{operator}\b'
-            result = re.sub(pattern, f'<span class="math-operator">{operator}</span>', result, flags=re.IGNORECASE)
-            
-        symbol_pattern = r'([-+*/])'
-        result = re.sub(symbol_pattern, r'<span class="math-operator">\1</span>', result)
+        symbols = ["+", "-", "*", "/"]
+
+        # Combine all patterns into one regex, sorted by length descending to match longest first
+        all_patterns = []
+        for p in query_indicators: all_patterns.append((p, "query-indicator"))
+        for p in tools: all_patterns.append((p, "tool-reference"))
+        for p in math_operators: all_patterns.append((p, "math-operator"))
+        for p in symbols: all_patterns.append((p, "math-operator"))
         
         if location:
-            escaped_location = re.escape(location)
-            pattern = fr'\b{escaped_location}\b'
-            result = re.sub(pattern, f'<span class="attribute">{location}</span>', result, flags=re.IGNORECASE)
+            all_patterns.append((location, "entity-location"))
+            
+        # Sort by length of pattern (descending)
+        all_patterns.sort(key=lambda x: len(x[0]), reverse=True)
         
+        # Build the master regex: (pattern1|pattern2|...)
+        # We handle word boundaries conditionally based on content
+        
+        pattern_map = {p.lower(): cls for p, cls in all_patterns}
+        pattern_parts = []
+        
+        for p, _ in all_patterns:
+            escaped = re.escape(p)
+            # If it starts with a word character, require word boundary at start
+            # If it ends with a word character, require word boundary at end
+            # This handles "weather" -> \bweather\b
+            # And "+" -> \+ (no boundary)
+            # And "Winston-Salem" -> \bWinston\-Salem\b
+            
+            part = escaped
+            if p[0].isalnum():
+                part = r'\b' + part
+            if p[-1].isalnum():
+                part = part + r'\b'
+            
+            pattern_parts.append(part)
+
+        master_pattern = '(' + '|'.join(pattern_parts) + ')'
+        
+        def replace_match(match):
+            word = match.group(0)
+            # keys in pattern_map are lowercased
+            cls = pattern_map.get(word.lower())
+            if cls:
+                return f'<span class="{cls}">{word}</span>'
+            return word
+            
+        try:
+            result = re.sub(master_pattern, replace_match, query, flags=re.IGNORECASE)
+        except Exception:
+            # Fallback if regex fails
+            return query
+            
         return result
 
     def _extract_math_expression(self, query: str) -> Optional[str]:
@@ -491,7 +547,7 @@ class SemanticParser:
                 }
             }
 
-            if response.status_code == 200:
+            if response.status_code == 200 and count > 0:
                 self.rate_limiter.add_request(ip, "search", user_id)
             
             if count > 0:

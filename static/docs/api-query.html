@@ -1,147 +1,225 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Query API - neubot docs</title>
+    <title>Query API - neubot</title>
     <link rel="stylesheet" href="../styles.css">
     <link rel="stylesheet" href="../ui-kit.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+        crossorigin="anonymous">
     <link rel="icon" href="../neubot-icon.svg" type="image/svg+xml">
-    <style>code, pre { background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 4px; font-family: monospace; } pre { padding: 16px; overflow-x: auto; }</style>
+    <style>
+        .docs-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 0.95em;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid var(--color-border-medium);
+        }
+
+        th {
+            background-color: var(--color-background-secondary);
+            font-weight: 600;
+        }
+
+        code {
+            background: var(--color-background-secondary);
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        
+        pre {
+            background: var(--color-background-secondary);
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+
+        .method {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .get { background-color: rgba(61, 169, 252, 0.1); color: #3da9fc; }
+        .post { background-color: rgba(43, 203, 186, 0.1); color: #2bcbba; }
+    </style>
 </head>
+
 <body>
-    <div class="container">
-        <div class="header-container">
-            <h1>neubot docs</h1>
-            <a href="index.html" class="back-link">Back to Docs</a>
+    <div class="docs-container">
+        <a href="index.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to Docs</a>
+        
+        <h1>Query API</h1>
+        <p>The core endpoint for interacting with Neubot's semantic engine. This endpoint processes natural language queries and returns structured responses, widgets, and thoughts.</p>
+
+        <hr>
+
+        <h2>Endpoints</h2>
+
+        <h3><span class="method post">POST</span> Process Query</h3>
+        <p>Submit a natural language query for processing.</p>
+        
+        <div class="endpoint">
+            <code>https://neubot.joshattic.us/api/query</code>
         </div>
-        <div class="legal-content">
-            <h1>Query API</h1>
-            <div class="legal-section">
-                <h2>Endpoint</h2>
-                <code>POST /api/query</code>
-            </div>
-            <div class="legal-section">
-                <h2>Description</h2>
-                <p>Processes natural language queries. This is the main entry point for all bot interactions.</p>
-            </div>
-            <div class="legal-section">
-                <h2>Request Body</h2>
-                <pre>{
-  "query": "what is the weather in Paris?",
-  "timezone": "Europe/Paris"
-}</pre>
-                <ul>
-                    <li><strong>query</strong> (string): The user's natural language input.</li>
-                    <li><strong>timezone</strong> (string, optional): IANA timezone string (e.g. "America/New_York"). Defaults to server config if omitted.</li>
-                </ul>
-            </div>
-            <div class="legal-section">
-                <h2>Response Structure</h2>
-                <pre>{
-  "response": "The weather in Paris is clear sky...",
-  "widgets": [
+
+        <h4>Headers</h4>
+        <table>
+            <thead>
+                <tr>
+                    <th>Header</th>
+                    <th>Value</th>
+                    <th>Required</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>Authorization</code></td>
+                    <td><code>Bearer &lt;token&gt;</code></td>
+                    <td>Yes</td>
+                    <td>Authentication token.</td>
+                </tr>
+                <tr>
+                    <td><code>Content-Type</code></td>
+                    <td><code>application/json</code></td>
+                    <td>Yes</td>
+                    <td></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h4>Body Parameters</h4>
+        <table>
+            <thead>
+                <tr>
+                    <th>Parameter</th>
+                    <th>Type</th>
+                    <th>Required</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>query</code></td>
+                    <td>string</td>
+                    <td>Yes</td>
+                    <td>The natural language text to process (e.g., "What's the weather?").</td>
+                </tr>
+                <tr>
+                    <td><code>timezone</code></td>
+                    <td>string</td>
+                    <td>No</td>
+                    <td>IANA timezone identifier (e.g., "America/New_York"). Used for date/time calculations. Defaults to server setting if omitted.</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h4>Response Schema</h4>
+        <pre>{
+  "response": "The weather in New York is sunny...",  // The spoken/text response
+  "widgets": [                                        // UI widgets to display
     {
       "type": "weather",
       "data": { ... }
     }
   ],
-  "thoughts": [ ... ],
-  "highlightedQuery": "what is the &lt;span...&gt;weather&lt;/span&gt;..."
+  "thoughts": [ ... ],                                // Reasoning trace (if authorized)
+  "highlightedQuery": "What's the <span>weather</span>?" // HTML string with entity highlighting
 }</pre>
-            </div>
-            <div class="legal-section">
-                <h2>Widget Types</h2>
-                <p>The <code>widgets</code> array returns structured data for handling richer responses. Each object has a <code>type</code> and a <code>data</code> payload.</p>
 
-                <h3>1. Weather Widget</h3>
-                <p>Type: <code>weather</code></p>
-                <p>Returned when the user asks for weather info.</p>
-                <div class="code-block-wrapper">
-                  <pre>{
+        <hr>
+
+        <h2>Widget Schemas</h2>
+        <p>The <code>widgets</code> array optionally contains structured data objects for UI rendering. Below are the definitions for the supported widget types.</p>
+
+        <h3>Weather Widget</h3>
+        <p><code>type: "weather"</code> -- Returned for weather-related queries.</p>
+        <pre>{
   "type": "weather",
   "data": {
-    "location": "Paris",             // (string) The resolved location name
-    "condition": "clear sky",        // (string) Weather condition description
+    "location": "New York",
+    "condition": "Cloudy",
     "temperature": {
-      "celsius": 15.2,               // (float) Temperature in Celsius
-      "fahrenheit": 59.4             // (float) Temperature in Fahrenheit
+      "celsius": 15.2,
+      "fahrenheit": 59.4
     },
-    "humidity": 65,                  // (int) Humidity percentage, 0-100
-    "description": "The weather..."  // (string) Redundant summary text
+    "humidity": 65,
+    "description": "The weather in New York is Cloudy with a temperature of..."
   }
 }</pre>
-                </div>
 
-                <h3>2. Search Results Widget</h3>
-                <p>Type: <code>search_results</code></p>
-                <p>Returned when a Brave Search query is executed.</p>
-                 <div class="code-block-wrapper">
-                  <pre>{
+        <h3>Search Results Widget</h3>
+        <p><code>type: "search_results"</code> -- Returned for general knowledge queries or explicit search requests.</p>
+        <pre>{
   "type": "search_results",
   "data": {
-    "query": "python tutorial",      // (string) The executed search query
-    "spellcheck": null,              // (string|null) Suggested spelling correction
+    "query": "search query",
+    "spellcheck": null,
     "results": [
       {
-        "title": "Welcome to Python",
-        "url": "https://python.org",
-        "description": "The official home...",
-        "favicon": "https://..."
+        "title": "Page Title",
+        "url": "https://example.com",
+        "description": "Snippet of content from the page...",
+        "favicon": "https://example.com/favicon.ico"
       }
     ],
     "meta": {
-      "total": 1,
-      "header": "Here's what I found..."
+      "total": 5,
+      "header": "Here's what I found on the web for \"search query\""
     }
   }
 }</pre>
-                </div>
 
-                <h3>3. Home Assistant Widget</h3>
-                <p>Type: <code>home_assistant</code></p>
-                <p>Returned when a home automation command is executed.</p>
-                 <div class="code-block-wrapper">
-                  <pre>{
+        <h3>Home Assistant Widget</h3>
+        <p><code>type: "home_assistant"</code> -- Returned for smart home control actions.</p>
+        <pre>{
   "type": "home_assistant",
   "data": {
-    "summary": "Turned on 1 light.",      // (string) Natural language summary
-    "action": "turn_on",                  // (string) The HA service action (turn_on/turn_off)
-    "domain": "light",                    // (string) The HA domain (light/switch/script/scene)
-    "devices": [                          // (array) List of affected devices
+    "summary": "I turned on the Living Room Light.",
+    "action": "turn_on", // "turn_on", "turn_off", "get_state", "multi"
+    "domain": "light",     // "light", "switch", "media_player", etc.
+    "devices": [
       {
         "entity_id": "light.living_room",
         "name": "Living Room",
-        "success": true,                  // (bool) Whether the API call succeeded
         "requested_action": "turn_on",
-        "applied_color": "blue",          // (string|null) Color name if applied
-        "applied_brightness_pct": 100     // (int|null) Brightness if applied
+        "success": true,
+        "code": 200,
+        "state_before": "off",
+        "state_current": "on", // included for 'get_state' actions
+        "applied_color": "blue",
+        "applied_brightness_pct": 50,
+        "attributes": {}
       }
     ],
-    "applied": {                          // (object) Global settings applied to this batch
+    "applied": {
       "color_name": "blue",
-      "brightness_pct": 100
+      "brightness_pct": 50
     }
   }
 }</pre>
-                </div>
 
-                <h3>4. Fun Result Widget</h3>
-                <p>Type: <code>fun_result</code></p>
-                <p>Returned for special easter eggs (e.g. "self destruct", "rainbow mode").</p>
-                 <div class="code-block-wrapper">
-                  <pre>{
-  "type": "fun_result",
-  "data": {
-    "variant": "self_destruct",       // (string) 'self_destruct' or 'rainbow'
-    "countdown": 5,                   // (int) Seconds for countdown (if variant=self_destruct)
-    "finalText": "BOOM!",             // (string) Text to show after countdown
-    "sequence": ["red", "orange..."]  // (array) Colors for rainbow mode
-  }
-}</pre>
-                </div>
-            </div>
-        </div>
+
     </div>
 </body>
 </html>

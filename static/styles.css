@@ -2458,3 +2458,48 @@ select {
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     z-index: 10;
 }
+
+/* Weather Widget */
+.weather-block.widget {
+    background: linear-gradient(135deg, #1e2023 0%, #2b2e33 100%);
+    border: 1px solid #363636;
+    color: #e0e0e0;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-top: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    display: inline-block;
+    min-width: 200px;
+}
+
+.weather-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    padding-bottom: 8px;
+}
+
+.weather-location {
+    font-weight: 600;
+    font-size: 16px;
+    color: #fff;
+}
+
+.weather-condition {
+    font-size: 13px;
+    color: #a0a0a0;
+}
+
+.weather-main {
+    font-size: 32px;
+    font-weight: 300;
+    color: #fff;
+    margin: 4px 0 8px 0;
+}
+
+.weather-details {
+    font-size: 13px;
+    color: #888;
+}

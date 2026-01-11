@@ -17,11 +17,6 @@ def integrations_page():
 def ha_setup_page():
     return send_from_directory(current_app.static_folder, 'home-assistant-setup.html')
 
-@view_bp.route('/developer')
-@login_required
-def developer_page():
-    return send_from_directory(current_app.static_folder, 'developer.html')
-
 @view_bp.route('/docs')
 def docs_index():
     return send_from_directory(current_app.static_folder, 'docs/index.html')

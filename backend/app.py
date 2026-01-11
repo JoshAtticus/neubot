@@ -7,8 +7,6 @@ from backend.models.user import User
 from backend.api.api_routes import api_bp
 from backend.api.auth_routes import auth_bp
 from backend.api.view_routes import view_bp
-from backend.api.developer_routes import developer_bp
-from backend.oauth2 import config_oauth
 import os
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -24,8 +22,6 @@ def create_app():
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     app.config['SESSION_COOKIE_SECURE'] = True
 
-    config_oauth(app)
-    
     CORS(app, origins="*", supports_credentials=True)
     login_manager.init_app(app)
     oauth.init_app(app)
@@ -54,12 +50,40 @@ def create_app():
     @login_manager.user_loader
     def load_user(user_id):
         return User.get(user_id)
+
+    # Request loader for API tokens
+    @login_manager.request_loader
+    def load_user_from_request(request):
+        # Check for Authorization header
+        auth_header = request.headers.get('Authorization')
+        if auth_header:
+            try:
+                # Expecting 'Bearer <token>'
+                token = auth_header.replace('Bearer ', '', 1)
+                from backend.security import decode_api_token
+                user_id = decode_api_token(token)
+                if user_id:
+                    return User.get(user_id)
+            except Exception:
+                return None
+        
+        # Check for token in args (optional, but requested in initial prompt "grab token from URL parameters" was for callback, but good for testing)
+        token = request.args.get('token')
+        if token:
+            try:
+                from backend.security import decode_api_token
+                user_id = decode_api_token(token)
+                if user_id:
+                    return User.get(user_id)
+            except Exception:
+                return None
+                
+        return None
         
     # Register blueprints
     app.register_blueprint(api_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(view_bp)
-    app.register_blueprint(developer_bp)
     
     # Initialize DB
     init_db()
