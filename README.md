@@ -12,4 +12,5 @@ a simple semantic parsing based chatbot (no llms here!)
 - google & github oauth2 login
 
 ## building with neubot
-looking to build an app with neubot's api? you're in luck! the neubot api is public, no api keys needed, simply head on over to the [api docs](API.md)
+looking to build an app with neubot's api? you're in luck! the neubot api is public, no api keys needed, simply head on over to the [api docs](https://neubot.joshattic.us/docs)
+
