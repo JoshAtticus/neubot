@@ -113,6 +113,52 @@ def auth_github():
     
     return redirect('/')
 
+@auth_bp.route('/login/joshatticusid')
+def login_joshatticusid():
+    state = secrets.token_urlsafe(16)
+    session['oauth_state'] = state
+    
+    redirect_uri = url_for('auth.auth_joshatticusid', _external=True)
+    return oauth.joshatticusid.authorize_redirect(redirect_uri, state=state)
+
+@auth_bp.route('/auth/joshatticusid')
+def auth_joshatticusid():
+    expected_state = session.pop('oauth_state', None)
+    callback_state = request.args.get('state')
+    
+    if not expected_state or callback_state != expected_state:
+        return "Invalid authentication state. Please try again.", 403
+        
+    token = oauth.joshatticusid.authorize_access_token()
+    resp = oauth.joshatticusid.get('https://id.joshattic.us/oauth/userinfo', token=token)
+    user_info = resp.json()
+    
+    user_id = f"joshid_{user_info['sub']}"
+    
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        existing_user = cursor.fetchone()
+        
+        if not existing_user:
+            cursor.execute(
+                "INSERT INTO users (id, name, email, provider, profile_pic) VALUES (?, ?, ?, ?, ?)",
+                (user_id, user_info.get('name'), user_info.get('email'), 'joshatticusid', user_info.get('picture'))
+            )
+            conn.commit()
+            
+    user = User(
+        id=user_id,
+        name=user_info.get('name'),
+        email=user_info.get('email'),
+        provider='joshatticusid',
+        profile_pic=user_info.get('picture')
+    )
+    login_user(user)
+    
+    return redirect('/')
+
 # App Login Routes
 @auth_bp.route('/login/app/')
 def login_app():
@@ -153,6 +199,15 @@ def login_app_github():
 
     redirect_uri = url_for('auth.auth_app_github_callback', _external=True)
     return oauth.github.authorize_redirect(redirect_uri, state=state)
+
+@auth_bp.route('/login/app/joshatticusid')
+def login_app_joshatticusid():
+    state = session.get('app_oauth_state')
+    if not state:
+        return "Invalid state, please start the login process again.", 400
+
+    redirect_uri = url_for('auth.auth_app_joshatticusid_callback', _external=True)
+    return oauth.joshatticusid.authorize_redirect(redirect_uri, state=state)
 
 @auth_bp.route('/auth/app/google/callback')
 def auth_app_google_callback():
@@ -226,6 +281,42 @@ def auth_app_github_callback():
             cursor.execute(
                 "INSERT INTO users (id, name, email, provider, profile_pic) VALUES (?, ?, ?, ?, ?)",
                 (user_id, user_info.get('name', user_info.get('login')), primary_email, 'github', user_info.get('avatar_url'))
+            )
+            conn.commit()
+
+    app_token = generate_api_token(user_id)
+    return redirect(callback_url.replace('[TOKEN]', app_token))
+
+@auth_bp.route('/auth/app/joshatticusid/callback')
+def auth_app_joshatticusid_callback():
+    state = session.pop('app_oauth_state', None)
+    callback_state = request.args.get('state')
+
+    if not state or state != callback_state:
+        return "Invalid authentication state. Please try again.", 403
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT callback_url FROM app_auth_requests WHERE state = ?", (state,))
+        auth_request = cursor.fetchone()
+        if not auth_request:
+            return "Invalid authentication request.", 403
+        callback_url = auth_request['callback_url']
+        cursor.execute("DELETE FROM app_auth_requests WHERE state = ?", (state,))
+        conn.commit()
+
+    token = oauth.joshatticusid.authorize_access_token()
+    resp = oauth.joshatticusid.get('https://id.joshattic.us/oauth/userinfo', token=token)
+    user_info = resp.json()
+    user_id = f"joshid_{user_info['sub']}"
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        if not cursor.fetchone():
+            cursor.execute(
+                "INSERT INTO users (id, name, email, provider, profile_pic) VALUES (?, ?, ?, ?, ?)",
+                (user_id, user_info.get('name'), user_info.get('email'), 'joshatticusid', user_info.get('picture'))
             )
             conn.commit()
 

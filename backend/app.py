@@ -25,6 +25,16 @@ def create_app():
     CORS(app, origins="*", supports_credentials=True)
     login_manager.init_app(app)
     oauth.init_app(app)
+
+    oauth.register(
+        name='joshatticusid',
+        client_id=Config.JOSHATTICUSID_CLIENT_ID,
+        client_secret=Config.JOSHATTICUSID_CLIENT_SECRET,
+        access_token_url='https://id.joshattic.us/oauth/token',
+        authorize_url='https://id.joshattic.us/oauth/authorize',
+        api_base_url='https://id.joshattic.us/',
+        client_kwargs={'scope': 'name email profile_picture'},
+    )
     
     oauth.register(
         name='google',
