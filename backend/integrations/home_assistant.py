@@ -111,7 +111,8 @@ def extract_ha_entities(query: str, thought_logger: Callable[[str, Any], None]) 
     has_sensor_keyword = any(re.search(rf"\b{re.escape(k)}\b", ql) for k in sensor_keywords)
 
     is_followup = False
-    if has_request_context() and "last_ha_domain" in session:
+    ha_session = get_ha_session_dict()
+    if has_request_context() and "last_ha_domain" in ha_session:
         followup_pronouns = [r"\bthem\b", r"\bit\b", r"\bthey\b", r"\bboth\b", r"\ball\b", r"\bthe\s+lights?\b", r"\bthe\s+switches?\b", r"\bthe\s+fans?\b"]
         has_pronoun = any(re.search(pat, ql) for pat in followup_pronouns)
         
@@ -240,19 +241,19 @@ def extract_ha_entities(query: str, thought_logger: Callable[[str, Any], None]) 
 
     # Apply follow-up fallback ONLY for fields that were NOT extracted!
     if is_followup:
-        if not result.get("ha_domain") and session.get("last_ha_domain"):
-            result["ha_domain"] = session.get("last_ha_domain")
+        if not result.get("ha_domain") and ha_session.get("last_ha_domain"):
+            result["ha_domain"] = ha_session.get("last_ha_domain")
             thought_logger("Restored conversational domain from session", result["ha_domain"])
-        if not result.get("ha_area") and session.get("last_ha_area"):
-            result["ha_area"] = session.get("last_ha_area")
+        if not result.get("ha_area") and ha_session.get("last_ha_area"):
+            result["ha_area"] = ha_session.get("last_ha_area")
             thought_logger("Restored conversational area from session", result["ha_area"])
-        if session.get("last_ha_entity_ids") and not result.get("ha_area"):
+        if ha_session.get("last_ha_entity_ids") and not result.get("ha_area"):
             # Only restore entity IDs if they didn't explicitly request another area/device
-            result["last_ha_entity_ids"] = session.get("last_ha_entity_ids")
+            result["last_ha_entity_ids"] = ha_session.get("last_ha_entity_ids")
             thought_logger("Restored conversational entity IDs from session", result["last_ha_entity_ids"])
-        if session.get("last_ha_sensor_types") and has_sensor_keyword and not result.get("ha_sensor_types"):
-            result["ha_sensor_types"] = session.get("last_ha_sensor_types")
-            result["ha_sensor_type"] = session.get("last_ha_sensor_types")[0]
+        if ha_session.get("last_ha_sensor_types") and has_sensor_keyword and not result.get("ha_sensor_types"):
+            result["ha_sensor_types"] = ha_session.get("last_ha_sensor_types")
+            result["ha_sensor_type"] = ha_session.get("last_ha_sensor_types")[0]
             
     return result
 
@@ -660,10 +661,11 @@ def execute_ha_tool(entities: Dict[str, Any], thought_logger: Callable[[str, Any
                 }
             }
             if has_request_context():
-                session["last_ha_domain"] = 'sensor' if any(r['entity_id'].startswith('sensor.') for r in results) else 'binary_sensor'
-                session["last_ha_area"] = list(area_readings.keys())[0] if area_readings else area
-                session["last_ha_sensor_types"] = sensor_types
-                session["last_ha_entity_ids"] = [r['entity_id'] for r in results]
+                ha_session = get_ha_session_dict()
+                ha_session["last_ha_domain"] = 'sensor' if any(r['entity_id'].startswith('sensor.') for r in results) else 'binary_sensor'
+                ha_session["last_ha_area"] = list(area_readings.keys())[0] if area_readings else area
+                ha_session["last_ha_sensor_types"] = sensor_types
+                ha_session["last_ha_entity_ids"] = [r['entity_id'] for r in results]
             return summary_text, [widget]
 
         # Single sensor matched
@@ -725,10 +727,11 @@ def execute_ha_tool(entities: Dict[str, Any], thought_logger: Callable[[str, Any
             }
         }
         if has_request_context():
-            session["last_ha_domain"] = eid.split('.')[0]
-            session["last_ha_area"] = cleaned_area
-            session["last_ha_sensor_types"] = sensor_types
-            session["last_ha_entity_ids"] = [eid]
+            ha_session = get_ha_session_dict()
+            ha_session["last_ha_domain"] = eid.split('.')[0]
+            ha_session["last_ha_area"] = cleaned_area
+            ha_session["last_ha_sensor_types"] = sensor_types
+            ha_session["last_ha_entity_ids"] = [eid]
         return summary_text, [widget]
 
     color_words_all = ["warm white","cool white","magenta","yellow","purple","orange","white","green","blue","pink","cyan","red"]
@@ -893,13 +896,14 @@ def execute_ha_tool(entities: Dict[str, Any], thought_logger: Callable[[str, Any
                 }
             }
             if has_request_context():
+                ha_session = get_ha_session_dict()
                 all_eids = []
                 for cl in clause_results:
                     all_eids.extend([e[0] for e in cl['entities']])
-                session["last_ha_domain"] = domain
-                session["last_ha_area"] = area or room
-                session["last_ha_sensor_types"] = sensor_types
-                session["last_ha_entity_ids"] = list(set(all_eids))
+                ha_session["last_ha_domain"] = domain
+                ha_session["last_ha_area"] = area or room
+                ha_session["last_ha_sensor_types"] = sensor_types
+                ha_session["last_ha_entity_ids"] = list(set(all_eids))
             return summary_text, [widget]
 
     target_entity = None
@@ -962,10 +966,11 @@ def execute_ha_tool(entities: Dict[str, Any], thought_logger: Callable[[str, Any
         return "I couldn't find a matching device.", []
 
     if has_request_context():
-        session["last_ha_domain"] = domain
-        session["last_ha_area"] = area or room
-        session["last_ha_sensor_types"] = sensor_types
-        session["last_ha_entity_ids"] = [e[0] for e in matched_entities]
+        ha_session = get_ha_session_dict()
+        ha_session["last_ha_domain"] = domain
+        ha_session["last_ha_area"] = area or room
+        ha_session["last_ha_sensor_types"] = sensor_types
+        ha_session["last_ha_entity_ids"] = [e[0] for e in matched_entities]
 
     if action == 'get_state':
         results = []

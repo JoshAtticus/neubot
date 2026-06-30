@@ -4,7 +4,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const thinkingProcess = document.getElementById('thinking-process');
     const sendButton = document.getElementById('send-button');
     const signInBanner = document.getElementById('sign-in-banner');
+    const updatedTermsBanner = document.getElementById('updated-terms-banner');
     const closeBannerBtn = document.getElementById('close-banner');
+    const updatedTermsBannerCloseBtn = document.getElementById('updated-terms-banner-close');
     const userProfileImg = document.getElementById('user-profile-img');
     const inputAreaContainer = document.querySelector('.input-area-container');
     const welcomeModal = document.getElementById('welcome-modal');
@@ -27,6 +29,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const bannerDismissed = localStorage.getItem('neubot_banner_dismissed') === 'true';
     const welcomeModalSeen = localStorage.getItem('neubot_welcome_seen') === 'true';
     const whatsNewModalSeen = localStorage.getItem('neubot_whats_new_20260630_seen') === 'true';
+    const updatedTerms20260630Dismissed = localStorage.getItem('neubot_updated_terms_20260630_dismissed') === 'true';
 
     if (!welcomeModalSeen) {
         welcomeModal.style.display = 'block';
@@ -49,6 +52,10 @@ document.addEventListener('DOMContentLoaded', function () {
             }, 300);
             localStorage.setItem('neubot_welcome_seen', 'true');
         });
+    }
+
+    if (!updatedTerms20260630Dismissed) {
+        updatedTermsBanner.style.display = 'flex';
     }
 
     if (closeWhatsNewModalBtn) {
@@ -1026,6 +1033,13 @@ document.addEventListener('DOMContentLoaded', function () {
         closeBannerBtn.addEventListener('click', function () {
             signInBanner.style.display = 'none';
             localStorage.setItem('neubot_banner_dismissed', 'true');
+        });
+    }
+
+    if (updatedTermsBannerCloseBtn) {
+        updatedTermsBannerCloseBtn.addEventListener('click', function () {
+            updatedTermsBanner.style.display = 'none';
+            localStorage.setItem('neubot_updated_terms_20260630_dismissed', 'true');
         });
     }
 

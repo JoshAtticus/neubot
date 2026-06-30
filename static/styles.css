@@ -1406,6 +1406,26 @@ input:focus+.toggle-slider {
     margin-bottom: 5px;
 }
 
+.updated-terms-banner {
+    background-color: #2a2a2a;
+    border-radius: 8px;
+    padding: 12px 20px;
+    margin-bottom: 15px;
+    display: none;
+    justify-content: space-between;
+    align-items: center;
+    animation: fadeIn 0.3s ease-out;
+    border-left: 4px solid #3498db;
+    flex-wrap: wrap;
+}
+
+.updated-terms-banner span {
+    color: #ddd;
+    font-size: 14px;
+    margin-right: 10px;
+    margin-bottom: 5px;
+}
+
 .banner-actions {
     display: flex;
     align-items: center;
@@ -1421,6 +1441,19 @@ input:focus+.toggle-slider {
 }
 
 .sign-in-banner a:hover {
+    color: #2980b9;
+    text-decoration: underline;
+}
+
+.updated-terms-banner a {
+    color: #3498db;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 14px;
+    transition: color 0.2s ease;
+}
+
+.updated-terms-banner a:hover {
     color: #2980b9;
     text-decoration: underline;
 }
