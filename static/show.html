@@ -1,19 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no" />
   <title>neubot — Show Mode</title>
   <link rel="stylesheet" href="/ui-kit.css" />
   <link rel="stylesheet" href="/show.css" />
   <!-- Font Awesome (Free) for icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
   <link rel="icon" href="/neubot-icon.svg" type="image/svg+xml" />
+  <script defer data-domain="neubot.joshattic.us" data-api="/metrics/v8-push" src="/assets/v8-core.js"></script>
 </head>
+
 <body class="show-mode-body">
   <div id="show-root" class="show-root">
     <!-- Left panel: Dashboard -->
-  <section class="panel panel-dashboard" data-panel="dashboard" aria-label="Dashboard">
+    <section class="panel panel-dashboard" data-panel="dashboard" aria-label="Dashboard">
       <div class="dash-header">
         <img src="neubot-icon.svg" alt="neubot" class="dash-logo" />
         <h2>Dashboard</h2>
@@ -21,7 +25,8 @@
       <div class="dash-content">
         <!-- Tabs -->
         <div class="tabs">
-          <button class="tab-btn active" data-tab="account"><i class="fa-solid fa-user"></i><span>Account</span></button>
+          <button class="tab-btn active" data-tab="account"><i
+              class="fa-solid fa-user"></i><span>Account</span></button>
           <button class="tab-btn" data-tab="settings"><i class="fa-solid fa-gear"></i><span>Settings</span></button>
         </div>
 
@@ -38,7 +43,8 @@
                 <div id="dash-user-email" class="account-email">Sign in for increased limits</div>
               </div>
               <div class="account-actions">
-                <button id="dash-signin" class="button outline"><i class="fa-solid fa-right-to-bracket"></i><span> Sign in</span></button>
+                <button id="dash-signin" class="button outline"><i class="fa-solid fa-right-to-bracket"></i><span> Sign
+                    in</span></button>
               </div>
             </div>
 
@@ -47,12 +53,14 @@
               <div class="limit-row">
                 <div class="limit-label">Search</div>
                 <div class="limit-bar"><span id="dash-search-bar"></span></div>
-                <div class="limit-stats"><span id="dash-search-used">0</span>/<span id="dash-search-limit">0</span></div>
+                <div class="limit-stats"><span id="dash-search-used">0</span>/<span id="dash-search-limit">0</span>
+                </div>
               </div>
               <div class="limit-row">
                 <div class="limit-label">Weather</div>
                 <div class="limit-bar"><span id="dash-weather-bar"></span></div>
-                <div class="limit-stats"><span id="dash-weather-used">0</span>/<span id="dash-weather-limit">0</span></div>
+                <div class="limit-stats"><span id="dash-weather-used">0</span>/<span id="dash-weather-limit">0</span>
+                </div>
               </div>
               <div class="limit-reset">Resets in <span id="dash-reset-days">-</span> day(s)</div>
             </div>
@@ -88,7 +96,8 @@
             </div>
 
             <div class="dash-actions">
-              <button id="exit-show-mode" class="button danger"><i class="fa-solid fa-arrow-left"></i><span> Exit Show Mode</span></button>
+              <button id="exit-show-mode" class="button danger"><i class="fa-solid fa-arrow-left"></i><span> Exit Show
+                  Mode</span></button>
             </div>
           </div>
         </div>
@@ -103,16 +112,16 @@
         <div id="clock-date" class="clock-date">---</div>
       </div>
 
-  <div id="show-big-message" class="show-big-message" aria-live="polite" role="log"></div>
+      <div id="show-big-message" class="show-big-message" aria-live="polite" role="log"></div>
 
-  <div id="show-response" class="show-response" role="log" aria-live="polite"></div>
+      <div id="show-response" class="show-response" role="log" aria-live="polite"></div>
     </section>
 
     <!-- Right panel: Quick actions -->
     <section class="panel panel-quick" data-panel="quick" aria-label="Quick Actions">
       <div class="quick-header">
         <h2>Quick Actions</h2>
-  <button id="add-action" class="icon-btn" title="Add action"><i class="fa-solid fa-plus"></i></button>
+        <button id="add-action" class="icon-btn" title="Add action"><i class="fa-solid fa-plus"></i></button>
       </div>
       <div id="pinned-actions" class="action-grid" aria-label="Pinned actions"></div>
       <div class="quick-sub">
@@ -146,7 +155,8 @@
           <div class="icon-picker-row">
             <div id="qa-icon-preview" class="icon-preview">💡</div>
             <input id="qa-icon" type="text" placeholder="emoji or fa-bolt" />
-            <button id="qa-pick-fa" type="button" class="button outline"><i class="fa-solid fa-icons"></i><span> Pick FA</span></button>
+            <button id="qa-pick-fa" type="button" class="button outline"><i class="fa-solid fa-icons"></i><span> Pick
+                FA</span></button>
           </div>
         </label>
         <label>Commands (one per line)
@@ -196,4 +206,5 @@
 
   <script src="/show.js"></script>
 </body>
+
 </html>

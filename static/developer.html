@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,11 +8,20 @@
     <link rel="stylesheet" href="/styles.css">
     <link rel="stylesheet" href="/ui-kit.css">
     <link rel="icon" href="/neubot-icon.svg" type="image/svg+xml">
+    <script defer data-domain="neubot.joshattic.us" data-api="/metrics/v8-push" src="/assets/v8-core.js"></script>
     <style>
-        .app-secret { filter: blur(4px); transition: filter 0.2s; cursor: pointer; }
-        .app-secret:hover { filter: none; }
+        .app-secret {
+            filter: blur(4px);
+            transition: filter 0.2s;
+            cursor: pointer;
+        }
+
+        .app-secret:hover {
+            filter: none;
+        }
+
         code {
-            background: rgba(255,255,255,0.1);
+            background: rgba(255, 255, 255, 0.1);
             padding: 2px 6px;
             border-radius: 4px;
             font-family: var(--font-mono);
@@ -20,6 +30,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div class="header-container">
@@ -33,23 +44,31 @@
             <section style="margin-bottom: 3rem;">
                 <div id="app-list" style="display: grid; gap: 1rem;">Loading...</div>
             </section>
-            
+
             <section>
                 <h2>Create New App</h2>
                 <div class="card">
                     <form id="create-app-form">
                         <div style="margin-bottom: 1rem;">
-                            <label style="display: block; margin-bottom: 0.5rem; color: var(--color-text-secondary); font-size: var(--text-sm);">App Name</label>
+                            <label
+                                style="display: block; margin-bottom: 0.5rem; color: var(--color-text-secondary); font-size: var(--text-sm);">App
+                                Name</label>
                             <input type="text" id="client_name" class="input" required placeholder="e.g. My Dashboard">
                         </div>
                         <div style="margin-bottom: 1rem;">
-                            <label style="display: block; margin-bottom: 0.5rem; color: var(--color-text-secondary); font-size: var(--text-sm);">Homepage URL</label>
+                            <label
+                                style="display: block; margin-bottom: 0.5rem; color: var(--color-text-secondary); font-size: var(--text-sm);">Homepage
+                                URL</label>
                             <input type="url" id="client_uri" class="input" placeholder="https://example.com">
                         </div>
                         <div style="margin-bottom: 1.5rem;">
-                            <label style="display: block; margin-bottom: 0.5rem; color: var(--color-text-secondary); font-size: var(--text-sm);">Redirect URIs (one per line)</label>
-                            <textarea id="redirect_uris" class="input" rows="3" required placeholder="https://example.com/callback"></textarea>
-                            <p style="margin-top: 0.5rem; margin-bottom: 0; font-size: var(--text-xs); color: var(--color-text-muted);">
+                            <label
+                                style="display: block; margin-bottom: 0.5rem; color: var(--color-text-secondary); font-size: var(--text-sm);">Redirect
+                                URIs (one per line)</label>
+                            <textarea id="redirect_uris" class="input" rows="3" required
+                                placeholder="https://example.com/callback"></textarea>
+                            <p
+                                style="margin-top: 0.5rem; margin-bottom: 0; font-size: var(--text-xs); color: var(--color-text-muted);">
                                 These URIs are where we will redirect the user after they authorize your app.
                             </p>
                         </div>
@@ -65,7 +84,7 @@
             if (res.status === 401) window.location.href = '/login';
             const apps = await res.json();
             const container = document.getElementById('app-list');
-            
+
             if (apps.length === 0) {
                 container.innerHTML = `
                     <div class="card" style="text-align: center; color: var(--color-text-muted); padding: 3rem;">
@@ -74,7 +93,7 @@
                 `;
                 return;
             }
-            
+
             container.innerHTML = apps.map(app => `
                 <div class="card">
                     <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
@@ -114,14 +133,14 @@
                 client_uri: document.getElementById('client_uri').value,
                 redirect_uris: document.getElementById('redirect_uris').value
             };
-            
+
             try {
                 const res = await fetch('/api/developer/apps', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });
-                
+
                 if (res.ok) {
                     loadApps();
                     e.target.reset();
@@ -137,4 +156,5 @@
         loadApps();
     </script>
 </body>
+
 </html>
