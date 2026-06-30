@@ -290,12 +290,19 @@ document.addEventListener('DOMContentLoaded', function () {
         const stepsCount = thoughts.length;
         const detailsId = 'details-' + Date.now();
         const toggleId = 'toggle-' + Date.now();
+        
+        const usesPersonalContext = thoughts.some(t => {
+            const desc = (t.description || '').toLowerCase();
+            return desc.includes('personal') || desc.includes('identity') || desc.includes('user_name') || desc.includes('user context');
+        });
+        
+        const contextLabel = usesPersonalContext ? ' using your personal context' : '';
 
         const messageHTML = `
             <div class="bot-icon"><img src="neubot-icon.svg" alt="Bot"></div>
             <div class="message-content">
                 <div class="message-info">
-                    Completed ${stepsCount} steps
+                    Completed ${stepsCount} steps${contextLabel}
                     <span class="see-details" id="${toggleId}">See details</span>
                 </div>
             </div>
@@ -537,8 +544,100 @@ document.addEventListener('DOMContentLoaded', function () {
         const devs = data.devices || [];
         const action = data.action || '';
         const applied = data.applied || {};
-        const iconMap = { light: '💡', switch: '⏻', fan: '🌀', scene: '🎬', script: '▶', group: '📦' };
-        const ico = iconMap[domain] || '⌂';
+        
+        // SVG symbols mapping to completely replace emojis
+        const svgIconMap = {
+            light: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`,
+            switch: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`,
+            fan: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v4a6 6 0 0 0 6 6h4"></path><path d="M12 22v-4a6 6 0 0 0-6-6H2"></path><path d="M22 12h-4a6 6 0 0 0-6 6v4"></path><path d="M2 12h4a6 6 0 0 0 6-6V2"></path></svg>`,
+            scene: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>`,
+            script: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`,
+            group: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>`,
+            sensor: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path></svg>`,
+            binary_sensor: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`
+        };
+
+        const ico = svgIconMap[domain] || `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>`;
+
+        if (domain === 'sensor' || domain === 'binary_sensor') {
+            const container = document.createElement('div');
+            container.className = 'ha-sensor-cards-container';
+            container.style.display = 'flex';
+            container.style.flexWrap = 'wrap';
+            container.style.gap = '12px';
+            container.style.marginTop = '12px';
+            
+            devs.forEach(d => {
+                const card = document.createElement('div');
+                card.className = 'weather-block widget';
+                card.style.margin = '0';
+                card.style.padding = '12px 16px';
+                card.style.minWidth = '220px';
+                card.style.flex = '1 1 220px';
+                
+                let stateVal = d.state_current || d.state_before || 'unknown';
+                const unit = (d.attributes && d.attributes.unit_of_measurement) || '';
+                
+                let cleanArea = d.name || d.entity_id;
+                for (const suffix of [" Temperature", " temperature", " Temp", " temp", " Humidity", " humidity", " Presence", " presence", " Motion", " motion", " Occupancy", " occupancy", " Sensor", " sensor"]) {
+                    cleanArea = cleanArea.replace(suffix, "");
+                }
+                
+                let sensorType = 'Sensor';
+                let valueDisplay = stateVal + unit;
+                
+                const thermometerSvg = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path></svg>`;
+                const dropletSvg = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>`;
+                const presenceSvg = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+
+                let cardIcon = svgIconMap[domain] || '';
+                
+                const stateLower = String(stateVal).toLowerCase();
+                if (stateLower === 'unavailable' || stateLower === 'unknown') {
+                    valueDisplay = `<span style="color:#ff5a67; font-weight:500; text-transform:capitalize;">${stateLower}</span>`;
+                }
+                
+                if (domain === 'binary_sensor') {
+                    sensorType = 'Presence';
+                    cardIcon = presenceSvg;
+                    if (stateVal === 'on') {
+                        valueDisplay = `<span style="color:#3ecf8e; font-weight:600;">Active</span>`;
+                    } else if (stateVal === 'off') {
+                        valueDisplay = `<span style="color:#889099; font-weight:600;">Clear</span>`;
+                    } else {
+                        valueDisplay = stateVal;
+                    }
+                } else {
+                    const devClass = d.attributes && d.attributes.device_class;
+                    if (devClass === 'temperature' || d.entity_id.includes('temp') || unit.includes('°')) {
+                        sensorType = 'Temperature';
+                        cardIcon = thermometerSvg;
+                    } else if (devClass === 'humidity' || d.entity_id.includes('humid') || unit === '%') {
+                        sensorType = 'Humidity';
+                        cardIcon = dropletSvg;
+                    } else {
+                        cardIcon = thermometerSvg;
+                    }
+                }
+                
+                card.innerHTML = `
+                    <div class="weather-header" style="border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 6px; margin-bottom: 8px;">
+                        <div class="weather-location" style="display:flex; align-items:center; font-size:15px; font-weight:600; color:#fff;">
+                            ${cardIcon} ${cleanArea}
+                        </div>
+                        <div class="weather-condition" style="font-size:12px; color:#889099; text-transform: capitalize;">
+                            ${sensorType}
+                        </div>
+                    </div>
+                    <div class="weather-main" style="font-size:28px; font-weight:300; color:#fff; margin: 4px 0 0 0;">
+                        ${valueDisplay}
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+            return container;
+        }
+
         const wrap = document.createElement('div');
         wrap.className = 'ha-block widget';
         const header = document.createElement('div');
@@ -550,7 +649,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (applied.color_name) appliedBits.push(applied.color_name);
         if (applied.brightness_pct) appliedBits.push(applied.brightness_pct + '%');
         const appliedText = appliedBits.length ? ' • ' + appliedBits.join(' @ ').replace(' @ %', '%') : '';
-        header.innerHTML = `<span class="ha-ico" aria-hidden="true">${ico}</span><span class="ha-h-text">${devs.length} ${domain}${devs.length === 1 ? '' : 's'} ${stateWord}${appliedText}</span>`;
+        header.innerHTML = `${ico}<span class="ha-h-text" style="vertical-align:middle; margin-left:6px;">${devs.length} ${domain}${devs.length === 1 ? '' : 's'} ${stateWord}${appliedText}</span>`;
         wrap.appendChild(header);
         const list = document.createElement('ul');
         list.className = 'ha-dev-list';
@@ -563,9 +662,40 @@ document.addEventListener('DOMContentLoaded', function () {
             devs.forEach(d => {
                 const li = document.createElement('li');
                 const success = !!d.success;
-                const isOn = action === 'turn_on' || (action === 'multi' && d.requested_action === 'turn_on');
-                const stateLabel = success ? (isOn ? 'on' : 'off') : 'error';
-                const stateClass = success ? (isOn ? 'on' : 'off') : 'err';
+                
+                // Get the state after action execution
+                let stateVal;
+                const reqAction = d.requested_action || action;
+                if (reqAction === 'turn_on') {
+                    stateVal = success ? 'on' : (d.state_before || 'off');
+                } else if (reqAction === 'turn_off') {
+                    stateVal = success ? 'off' : (d.state_before || 'on');
+                } else {
+                    stateVal = d.state_current || d.state_before || 'unknown';
+                }
+                
+                let stateLabel = '';
+                let stateClass = '';
+                let showDot = true;
+                
+                if (!success) {
+                    stateLabel = 'error';
+                    stateClass = 'err';
+                } else if (stateVal === 'on') {
+                    stateLabel = 'on';
+                    stateClass = 'on';
+                } else if (stateVal === 'off') {
+                    stateLabel = 'off';
+                    stateClass = 'off';
+                } else {
+                    // For numeric sensors (like temperature, humidity, etc.)
+                    const unit = (d.attributes && d.attributes.unit_of_measurement) || '';
+                    stateLabel = stateVal + unit;
+                    stateClass = 'off'; // neutral grey style
+                    showDot = false; // omit the dot for numeric values
+                }
+                
+                const dotHtml = showDot ? '<span class="dot"></span>' : '';
                 let extra = '';
                 if (d.applied_color) {
                     extra += `<span class="ha-mini-chip" style="--ha-chip-color:${d.applied_color}" title="${d.applied_color}"></span>`;
@@ -573,7 +703,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (typeof d.applied_brightness_pct === 'number') {
                     extra += `<span class="ha-mini-br">${d.applied_brightness_pct}%</span>`;
                 }
-                li.innerHTML = `<span class="nm" title="${d.entity_id}">${d.name || d.entity_id}</span><span class="st ${stateClass}"><span class="dot"></span>${stateLabel}</span>${extra}`;
+                li.innerHTML = `<span class="nm" title="${d.entity_id}">${d.name || d.entity_id}</span><span class="st ${stateClass}">${dotHtml}${stateLabel}</span>${extra}`;
                 list.appendChild(li);
             });
         }

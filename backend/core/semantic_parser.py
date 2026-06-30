@@ -364,7 +364,7 @@ class SemanticParser:
             if response.status_code == 200:
                 self.rate_limiter.add_request(ip, "weather", user_id)
             
-            text_response = f"The weather in {capitalized_location} is {condition} with a temperature of {temp_c:.1f}°C/{temp_f:.1f}°F and {humidity}% humidity."
+            text_response = f"The weather in {capitalized_location} is {condition} with a temperature of {temp_c:.1f}°C/{temp_f:.1f}°F, and {humidity}% humidity."
             
             weather_widget = {
                 "type": "weather",
@@ -653,6 +653,32 @@ class SemanticParser:
     def process(self, query: str, user_timezone: str = Config.DEFAULT_TIMEZONE) -> Tuple[str, List[Dict[str, Any]], List[Dict[str, Any]], str]:
         self._reset_thoughts()
         self._add_thought("Received query", query)
+        
+        # Intercept personal queries about user identity
+        ql = query.lower()
+        personal_patterns = [
+            r"\bmy name\b",
+            r"\bwho am i\b",
+            r"\bwhat is my name\b",
+            r"\bdo you know my name\b",
+            r"\bdo you know who i am\b",
+            r"\bmy email\b",
+            r"\bwhat is my email\b",
+            r"\bam i logged in\b",
+            r"\bmy account\b"
+        ]
+        if any(re.search(pat, ql) for pat in personal_patterns):
+            from flask_login import current_user
+            if current_user.is_authenticated and hasattr(current_user, 'name') and current_user.name:
+                response = f"Your name is {current_user.name}."
+                if hasattr(current_user, 'email') and current_user.email:
+                    response += f" You are logged in with the email {current_user.email}."
+                self._add_thought("Answered personal query about user identity", response)
+                return response, [], [t.__dict__ for t in self.thoughts], self._highlight_query(query)
+            else:
+                response = "I don't know your name yet. Please sign in so I can get to know you!"
+                self._add_thought("Personal query failed - user not authenticated", response)
+                return response, [], [t.__dict__ for t in self.thoughts], self._highlight_query(query)
         
         tokens = re.findall(r"[\w']+|[.,!?;]", query)
         

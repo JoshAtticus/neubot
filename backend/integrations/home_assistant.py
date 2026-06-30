@@ -49,6 +49,14 @@ def is_home_assistant_query(query: str) -> bool:
     """Detects if a query is intended for Home Assistant."""
     ql = query.lower()
     
+    # Check for sensor keywords
+    sensor_keywords = ["temperature", "temp", "humidity", "humid", "presence", "motion", "occupancy", "movement", "someone", "somebody", "anyone", "anybody"]
+    has_sensor_keyword = any(re.search(rf"\b{re.escape(k)}\b", ql) for k in sensor_keywords)
+    if has_sensor_keyword:
+        question_indicators = ["what", "how", "is", "are", "check", "get", "read", "show", "status", "tell", "state", "find", "who"]
+        if any(re.search(rf"\b{re.escape(qi)}\b", ql) for qi in question_indicators) or "temperature" in ql or "humidity" in ql:
+            return True
+            
     # Check for direct domains
     has_domain = False
     for term in HA_DOMAIN_TERMS:
@@ -76,6 +84,66 @@ def extract_ha_entities(query: str, thought_logger: Callable[[str, Any], None]) 
     thought_logger("Extracting Home Assistant entities", None)
     ql = query.lower()
     result: Dict[str, Any] = {}
+
+    sensor_keywords = ["temperature", "temp", "humidity", "humid", "presence", "motion", "occupancy", "movement", "someone", "somebody", "anyone", "anybody"]
+    has_sensor_keyword = any(re.search(rf"\b{re.escape(k)}\b", ql) for k in sensor_keywords)
+
+    if has_sensor_keyword:
+        result["ha_action"] = "get_state"
+        
+        sensor_types = []
+        if "temp" in ql or "temperature" in ql or "warm" in ql or "cold" in ql or "hot" in ql:
+            sensor_types.append("temperature")
+        if "humid" in ql or "humidity" in ql or "moisture" in ql:
+            sensor_types.append("humidity")
+        if any(k in ql for k in ["presence", "motion", "someone", "somebody", "anyone", "anybody", "movement", "occupancy", "occupied"]):
+            sensor_types.append("presence")
+            
+        if sensor_types:
+            result["ha_sensor_types"] = sensor_types
+            result["ha_sensor_type"] = sensor_types[0]
+            result["ha_domain"] = "sensor" if "presence" not in sensor_types or len(sensor_types) > 1 else "binary_sensor"
+
+        ha_area = None
+        
+        # 1. Match area after sensor keywords
+        kw_pattern = r"\b(?:temperature|temp|humidity|humid|presence|motion|occupancy|movement|someone)\b"
+        area_after_match = re.search(
+            rf"{kw_pattern}(?:\s+(?:and|or)\s+{kw_pattern})?\s*(?:in|at|for|of)?\s*(?:the|my)?\s*([a-zA-Z ]{{2,30}})",
+            ql
+        )
+        if area_after_match:
+            candidate = area_after_match.group(1).strip()
+            candidate = re.sub(r"\b(please|now|right|today|sensor|sensors|is|are|get|read|show|check|tell|what|whats)\b", "", candidate).strip()
+            candidate = candidate.rstrip('?').strip()
+            if candidate and len(candidate.split()) <= 3:
+                ha_area = candidate
+
+        # 2. Preposition fallback
+        if not ha_area:
+            area_match = re.search(r"\b(?:in|at|for|of)\s+(?:the|my)?\s*([a-zA-Z ]{2,30})", ql)
+            if area_match:
+                candidate = area_match.group(1).strip()
+                candidate = re.sub(r"\b(please|now|right|today|sensor|sensors)\b", "", candidate).strip()
+                candidate = candidate.rstrip('?').strip()
+                if candidate and len(candidate.split()) <= 3:
+                    ha_area = candidate
+
+        # 3. Backward match fallback
+        if not ha_area:
+            for kw in sensor_keywords:
+                m = re.search(rf"\b([a-zA-Z ]{{2,30}}?)\b{re.escape(kw)}\b", ql)
+                if m:
+                    candidate = m.group(1).strip()
+                    candidate = re.sub(r"\b(turn|switch|set|activate|run|start|stop|on|off|the|my|a|to|what|whats|is|are|check|get|read)\b", "", candidate).strip()
+                    if candidate and len(candidate.split()) <= 3:
+                        ha_area = candidate
+                        break
+
+        if ha_area:
+            result["ha_area"] = ha_area
+            
+        return result
 
     action = None
     # Check for state inquiries
@@ -287,6 +355,307 @@ def execute_ha_tool(entities: Dict[str, Any], thought_logger: Callable[[str, Any
         states = resp.json()
     except Exception as e:
         return f"Error contacting Home Assistant: {e}", []
+
+    sensor_types = entities.get('ha_sensor_types') or []
+    if not sensor_types and entities.get('ha_sensor_type'):
+        sensor_types = [entities.get('ha_sensor_type')]
+
+    if sensor_types:
+        user_name = None
+        if current_user.is_authenticated and hasattr(current_user, 'name') and current_user.name:
+            user_name = current_user.name.split()[0].lower()
+
+        areas = []
+        if area:
+            raw_areas = re.split(r'\band\b|\bor\b|,', area)
+            for ra in raw_areas:
+                cleaned = ra.strip()
+                if cleaned:
+                    cleaned = re.sub(r'^(the|my|a)\s+', '', cleaned).strip()
+                    if cleaned:
+                        if cleaned.endswith('s') and len(cleaned) > 3:
+                            singular = cleaned[:-1]
+                            areas.append(singular)
+                        areas.append(cleaned)
+        else:
+            areas = []
+
+        selected_candidates = []
+        
+        for s_type in sensor_types:
+            candidates = []
+            for st in states:
+                eid = st.get('entity_id', '')
+                
+                # Temperature & Humidity queries must ONLY match sensor.* entities
+                if s_type in ('temperature', 'humidity'):
+                    if not eid.startswith('sensor.'):
+                        continue
+                else:
+                    if not (eid.startswith('sensor.') or eid.startswith('binary_sensor.')):
+                        continue
+                    
+                fname = st.get('attributes', {}).get('friendly_name', '') or ''
+                fname_l = fname.lower()
+                eid_l = eid.lower()
+                
+                is_type_match = False
+                unit = st.get('attributes', {}).get('unit_of_measurement', '') or ''
+                device_class = st.get('attributes', {}).get('device_class', '') or ''
+                
+                if s_type == 'temperature':
+                    if 'temperature' in fname_l or 'temp' in fname_l or device_class == 'temperature' or '°' in unit or unit in ('C', 'F'):
+                        is_type_match = True
+                elif s_type == 'humidity':
+                    # Smart filter: exclude dehumidifiers from humidity queries
+                    if ('humidity' in fname_l or 'humid' in fname_l) and 'dehumid' not in fname_l and 'dehumid' not in eid_l:
+                        is_type_match = True
+                elif s_type == 'presence':
+                    presence_keywords = ['motion', 'presence', 'occupancy', 'movement', 'occupant', 'pir', 'occupy', 'someone', 'somebody', 'person']
+                    if any(kw in fname_l or kw in eid_l for kw in presence_keywords) or device_class in ('motion', 'occupancy', 'presence', 'moving'):
+                        is_type_match = True
+                        
+                if not is_type_match:
+                    continue
+                    
+                # Score candidate based on area/room
+                score = 0.0
+                if areas:
+                    for a in areas:
+                        a_l = a.lower()
+                        a_words = [w for w in re.findall(r"\w+", a_l) if w not in ('the', 'my', 'a', 'in', 'at')]
+                        
+                        if a_l in fname_l or a_l in eid_l:
+                            score = max(score, 1.0)
+                            
+                        word_matches = sum(1 for w in a_words if w in fname_l or w in eid_l)
+                        if a_words:
+                            match_ratio = (word_matches / len(a_words)) * 0.8
+                            score = max(score, match_ratio)
+                            
+                        # Special veranda front door matching
+                        if 'front door' in a_l and ('front' in fname_l or 'door' in fname_l or 'veranda' in fname_l):
+                            score = max(score, 0.5)
+                            
+                    # Personalization boost: if query has "my" and sensor friendly name contains user name
+                    if 'my' in ql and user_name:
+                        if user_name in fname_l or user_name in eid_l:
+                            score += 0.5
+                            thought_logger(f"Applied personal context for user '{user_name}' on sensor '{fname}'", None)
+                else:
+                    score = 0.1
+                    
+                # Prioritize binary_sensors for presence
+                if s_type == 'presence' and eid.startswith('binary_sensor.'):
+                    score += 0.1
+                    
+                # Slightly lower score for unavailable/unknown sensors so active ones are preferred
+                state_val = st.get('state', 'unknown')
+                if state_val.lower() in ('unavailable', 'unknown'):
+                    score -= 0.2
+                    
+                candidates.append((score, st, fname, eid, s_type))
+                
+            # Filter and keep candidates with score >= 0.5 that are close to the highest score
+            if candidates:
+                candidates.sort(key=lambda x: x[0], reverse=True)
+                highest_score = candidates[0][0]
+                for cand in candidates:
+                    c_score = cand[0]
+                    if c_score >= 0.5:
+                        if c_score >= highest_score - 0.2:
+                            selected_candidates.append(cand)
+
+        # Fallback if no match is found
+        if area and not selected_candidates:
+            all_sensors_of_type = []
+            for st in states:
+                eid = st.get('entity_id', '')
+                if not (eid.startswith('sensor.') or eid.startswith('binary_sensor.')):
+                    continue
+                fname = st.get('attributes', {}).get('friendly_name', '') or ''
+                fname_l = fname.lower()
+                device_class = st.get('attributes', {}).get('device_class', '') or ''
+                unit = st.get('attributes', {}).get('unit_of_measurement', '') or ''
+                
+                is_type_match = False
+                for s_type in sensor_types:
+                    if s_type == 'temperature':
+                        if eid.startswith('sensor.'):
+                            if 'temperature' in fname_l or 'temp' in fname_l or device_class == 'temperature' or '°' in unit or unit in ('C', 'F'):
+                                is_type_match = True
+                    elif s_type == 'humidity':
+                        if eid.startswith('sensor.'):
+                            if ('humidity' in fname_l or 'humid' in fname_l) and 'dehumid' not in fname_l and 'dehumid' not in eid_l:
+                                is_type_match = True
+                    elif s_type == 'presence':
+                        presence_keywords = ['motion', 'presence', 'occupancy', 'movement', 'occupant', 'pir', 'occupy', 'someone', 'somebody', 'person']
+                        if any(kw in fname_l or kw in eid_l for kw in presence_keywords) or device_class in ('motion', 'occupancy', 'presence', 'moving'):
+                            is_type_match = True
+                        
+                if is_type_match:
+                    cleaned = fname
+                    for suffix in [" Temperature", " temperature", " Temp", " temp", " Humidity", " humidity", " Presence", " presence", " Motion", " motion", " Occupancy", " occupancy", " Sensor", " sensor"]:
+                        cleaned = cleaned.replace(suffix, "")
+                    if cleaned and cleaned not in all_sensors_of_type:
+                        all_sensors_of_type.append(cleaned)
+            
+            type_words = []
+            for s_type in sensor_types:
+                type_words.append("temperature" if s_type == "temperature" else "humidity" if s_type == "humidity" else "presence")
+            type_word = " and ".join(type_words)
+            
+            msg = f"I couldn't find a {type_word} sensor for the '{area}'."
+            if all_sensors_of_type:
+                msg += f" Available areas: {', '.join(all_sensors_of_type)}."
+            else:
+                msg += f" I couldn't find any {type_word} sensors linked to your Home Assistant."
+            return msg, []
+            
+        if not selected_candidates:
+            type_word = "temperature" if "temperature" in sensor_types else "humidity" if "humidity" in sensor_types else "presence"
+            return f"I couldn't find any active {type_word} sensors in your Home Assistant configuration.", []
+
+        def format_area_with_preposition(area_name: str) -> str:
+            lower_name = area_name.lower()
+            if "'s" in lower_name or lower_name.startswith("josh") or lower_name.startswith("jesse"):
+                return area_name
+            else:
+                return f"the {area_name}"
+
+        # If multiple sensors selected (e.g. plural or multiple rooms/types requested)
+        if len(selected_candidates) > 1:
+            area_readings = {}
+            results = []
+            for score, st, fname, eid, s_type in selected_candidates:
+                curr_state = st.get('state', 'unknown')
+                attrs = st.get('attributes', {})
+                unit = attrs.get('unit_of_measurement', '') or ''
+                
+                if curr_state.lower() in ("unavailable", "unknown"):
+                    unit_str = ""
+                else:
+                    unit_str = unit or ("°C" if s_type == "temperature" else "%" if s_type == "humidity" else "")
+                
+                cleaned_area = fname
+                for suffix in [" Temperature", " temperature", " Temp", " temp", " Humidity", " humidity", " Presence", " presence", " Motion", " motion", " Occupancy", " occupancy", " Sensor", " sensor"]:
+                    cleaned_area = cleaned_area.replace(suffix, "")
+                    
+                results.append({
+                    'entity_id': eid,
+                    'name': fname,
+                    'requested_action': 'get_state',
+                    'success': True,
+                    'code': 200,
+                    'state_current': curr_state,
+                    'attributes': attrs,
+                    'state_before': curr_state
+                })
+                
+                if cleaned_area not in area_readings:
+                    area_readings[cleaned_area] = []
+                area_readings[cleaned_area].append((s_type, curr_state, unit_str))
+                
+            area_summaries = []
+            for cleaned_area, readings in area_readings.items():
+                if len(readings) == 1:
+                    s_type, state, unit_str = readings[0]
+                    if state.lower() in ("unavailable", "unknown"):
+                        area_summaries.append(f"the sensor in {format_area_with_preposition(cleaned_area)} is {state.lower()}")
+                    else:
+                        if s_type == 'temperature':
+                            area_summaries.append(f"the temperature in {format_area_with_preposition(cleaned_area)} is {state}{unit_str}")
+                        elif s_type == 'humidity':
+                            area_summaries.append(f"the humidity in {format_area_with_preposition(cleaned_area)} is {state}{unit_str}")
+                        elif s_type == 'presence':
+                            status = "someone is detected" if state == 'on' else "clear"
+                            area_summaries.append(f"{format_area_with_preposition(cleaned_area)} is {status}")
+                else:
+                    reading_texts = []
+                    for s_type, state, unit_str in readings:
+                        if state.lower() in ("unavailable", "unknown"):
+                            reading_texts.append(f"the {s_type} sensor is {state.lower()}")
+                        elif s_type == 'presence':
+                            status = "someone is detected" if state == 'on' else "clear"
+                            reading_texts.append(status)
+                        else:
+                            reading_texts.append(f"{s_type} is {state}{unit_str}")
+                    area_summaries.append(f"in {format_area_with_preposition(cleaned_area)}, {', '.join(reading_texts[:-1])} and {reading_texts[-1]}")
+            
+            summary_text = "; ".join(area_summaries)
+            if summary_text:
+                summary_text = summary_text[0].upper() + summary_text[1:] + "."
+                
+            widget = {
+                'type': 'home_assistant',
+                'data': {
+                    'summary': summary_text,
+                    'action': 'get_state',
+                    'domain': 'sensor',
+                    'devices': results
+                }
+            }
+            return summary_text, [widget]
+
+        # Single sensor matched
+        score, st, fname, eid, s_type = selected_candidates[0]
+        current_state = st.get('state', 'unknown')
+        attrs = st.get('attributes', {})
+        unit = attrs.get('unit_of_measurement', '') or ''
+        
+        cleaned_area = fname
+        for suffix in [" Temperature", " temperature", " Temp", " temp", " Humidity", " humidity", " Presence", " presence", " Motion", " motion", " Occupancy", " occupancy", " Sensor", " sensor"]:
+            cleaned_area = cleaned_area.replace(suffix, "")
+            
+        results = [{
+            'entity_id': eid,
+            'name': fname,
+            'requested_action': 'get_state',
+            'success': True,
+            'code': 200,
+            'state_current': current_state,
+            'attributes': attrs,
+            'state_before': current_state
+        }]
+        
+        unit_str = "" if current_state.lower() in ("unavailable", "unknown") else (unit or ("°C" if s_type == "temperature" else "%" if s_type == "humidity" else ""))
+        
+        if current_state.lower() in ("unavailable", "unknown"):
+            if s_type == 'temperature':
+                summary_text = f"The temperature sensor in {format_area_with_preposition(cleaned_area)} is {current_state.lower()}."
+            elif s_type == 'humidity':
+                summary_text = f"The humidity sensor in {format_area_with_preposition(cleaned_area)} is {current_state.lower()}."
+            elif s_type == 'presence':
+                summary_text = f"The presence sensor in {format_area_with_preposition(cleaned_area)} is {current_state.lower()}."
+        else:
+            if s_type == 'temperature':
+                summary_text = f"The temperature in {format_area_with_preposition(cleaned_area)} is {current_state}{unit_str}."
+            elif s_type == 'humidity':
+                summary_text = f"The humidity in {format_area_with_preposition(cleaned_area)} is {current_state}{unit_str}."
+            elif s_type == 'presence':
+                prep = "at" if "door" in cleaned_area.lower() or "veranda" in cleaned_area.lower() else "in"
+                has_someone = any(kw in ql for kw in ["someone", "somebody", "person", "anyone", "anybody"])
+                if current_state == 'on':
+                    if has_someone:
+                        summary_text = f"Yes, someone is {prep} {format_area_with_preposition(cleaned_area)}."
+                    else:
+                        summary_text = f"Yes, motion is detected {prep} {format_area_with_preposition(cleaned_area)}."
+                else:
+                    if has_someone:
+                        summary_text = f"No, there is no one {prep} {format_area_with_preposition(cleaned_area)}."
+                    else:
+                        summary_text = f"No, there is no motion detected {prep} {format_area_with_preposition(cleaned_area)}."
+                    
+        widget = {
+            'type': 'home_assistant',
+            'data': {
+                'summary': summary_text,
+                'action': 'get_state',
+                'domain': eid.split('.')[0],
+                'devices': results
+            }
+        }
+        return summary_text, [widget]
 
     color_words_all = ["warm white","cool white","magenta","yellow","purple","orange","white","green","blue","pink","cyan","red"]
 
