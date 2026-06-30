@@ -722,11 +722,18 @@ document.addEventListener('DOMContentLoaded', function () {
                     const entityId = this.dataset.entityId;
                     const act = checked ? 'turn_on' : 'turn_off';
                     const statusTextEl = card.querySelector('.ha-device-status-text');
+                    const switchContainer = this.closest('.toggle-switch');
 
                     if (statusTextEl) {
                         statusTextEl.textContent = checked ? 'On' : 'Off';
                         statusTextEl.style.color = checked ? '#3ecf8e' : '#889099';
                     }
+
+                    if (switchContainer) {
+                        switchContainer.classList.add('pending');
+                        switchContainer.classList.remove('failed');
+                    }
+                    this.disabled = true;
 
                     try {
                         const res = await fetch('/api/integrations/home-assistant/control', {
@@ -735,21 +742,46 @@ document.addEventListener('DOMContentLoaded', function () {
                             body: JSON.stringify({ entity_id: entityId, action: act })
                         });
                         const resData = await res.json();
-                        if (!resData.success) {
+                        if (switchContainer) {
+                            switchContainer.classList.remove('pending');
+                        }
+
+                        if (resData.success) {
+                            this.disabled = false;
+                        } else {
                             console.error("Control failed:", resData.error);
+                            if (switchContainer) {
+                                switchContainer.classList.add('failed');
+                            }
                             this.checked = !checked;
                             if (statusTextEl) {
                                 statusTextEl.textContent = !checked ? 'On' : 'Off';
                                 statusTextEl.style.color = !checked ? '#3ecf8e' : '#889099';
                             }
+                            setTimeout(() => {
+                                if (switchContainer) {
+                                    switchContainer.classList.remove('failed');
+                                }
+                                this.disabled = false;
+                            }, 1000);
                         }
                     } catch (e) {
                         console.error(e);
+                        if (switchContainer) {
+                            switchContainer.classList.remove('pending');
+                            switchContainer.classList.add('failed');
+                        }
                         this.checked = !checked;
                         if (statusTextEl) {
                             statusTextEl.textContent = !checked ? 'On' : 'Off';
                             statusTextEl.style.color = !checked ? '#3ecf8e' : '#889099';
                         }
+                        setTimeout(() => {
+                            if (switchContainer) {
+                                switchContainer.classList.remove('failed');
+                            }
+                            this.disabled = false;
+                        }, 1000);
                     }
                 });
             }

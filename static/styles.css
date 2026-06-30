@@ -887,6 +887,24 @@ input:focus+.toggle-slider {
     box-shadow: 0 0 1px #3498db;
 }
 
+/* Loading and Failed states for toggles */
+.toggle-switch.pending .toggle-slider {
+    background-color: #555 !important;
+}
+
+.toggle-switch.pending .toggle-slider:before {
+    background-color: #888 !important;
+}
+
+@keyframes flash-red {
+    0%, 100% { background-color: #e74c3c; }
+    50% { background-color: #c0392b; }
+}
+
+.toggle-switch.failed .toggle-slider {
+    animation: flash-red 0.5s ease-in-out 2;
+}
+
 .account-message {
     background: #2a2a2a;
     border-radius: 8px;
