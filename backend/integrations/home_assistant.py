@@ -62,6 +62,12 @@ HA_DOMAIN_TERMS = {
     "scripts": "script",
 }
 
+SENSOR_KEYWORDS = [
+    "temperature", "temp", "tempature", "temperatue", "temperatur",
+    "humidity", "humid", "humdity", "humidy", "humidty",
+    "presence", "motion", "occupancy", "movement", "someone", "somebody", "anyone", "anybody"
+]
+
 def is_home_assistant_query(query: str) -> bool:
     """Detects if a query is intended for Home Assistant."""
     ql = query.lower()
@@ -80,21 +86,19 @@ def is_home_assistant_query(query: str) -> bool:
         ]
         has_control_indicator = any(re.search(pat, ql) for pat in control_indicators)
         
-        sensor_keywords = ["temperature", "temp", "humidity", "humid", "presence", "motion", "occupancy", "movement", "someone", "somebody", "anyone", "anybody"]
-        is_single_sensor = len(ql.split()) == 1 and ql.strip("?.,!") in sensor_keywords
+        is_single_sensor = len(ql.split()) == 1 and ql.strip("?.,!") in SENSOR_KEYWORDS
         
         transitions = [r"\bwhat\s+about\b", r"\bhow\s+about\b", r"\band\s+the\b", r"\band\b"]
-        has_transition = any(re.search(pat, ql) for pat in transitions) and any(re.search(rf"\b{re.escape(k)}\b", ql) for k in sensor_keywords)
+        has_transition = any(re.search(pat, ql) for pat in transitions) and any(re.search(rf"\b{re.escape(k)}\b", ql) for k in SENSOR_KEYWORDS)
         
         if has_pronoun or has_control_indicator or is_single_sensor or has_transition:
             return True
             
     # Check for sensor keywords
-    sensor_keywords = ["temperature", "temp", "humidity", "humid", "presence", "motion", "occupancy", "movement", "someone", "somebody", "anyone", "anybody"]
-    has_sensor_keyword = any(re.search(rf"\b{re.escape(k)}\b", ql) for k in sensor_keywords)
+    has_sensor_keyword = any(re.search(rf"\b{re.escape(k)}\b", ql) for k in SENSOR_KEYWORDS)
     if has_sensor_keyword:
         question_indicators = ["what", "how", "is", "are", "check", "get", "read", "show", "status", "tell", "state", "find", "who"]
-        if any(re.search(rf"\b{re.escape(qi)}\b", ql) for qi in question_indicators) or "temperature" in ql or "humidity" in ql:
+        if any(re.search(rf"\b{re.escape(qi)}\b", ql) for qi in question_indicators) or any(w in ql for w in ["temperature", "tempature", "temperatue", "temperatur", "humidity", "humdity", "humidy", "humidty"]):
             return True
             
     # Check for direct domains
@@ -125,8 +129,7 @@ def extract_ha_entities(query: str, thought_logger: Callable[[str, Any], None]) 
     ql = query.lower()
     result: Dict[str, Any] = {}
 
-    sensor_keywords = ["temperature", "temp", "humidity", "humid", "presence", "motion", "occupancy", "movement", "someone", "somebody", "anyone", "anybody"]
-    has_sensor_keyword = any(re.search(rf"\b{re.escape(k)}\b", ql) for k in sensor_keywords)
+    has_sensor_keyword = any(re.search(rf"\b{re.escape(k)}\b", ql) for k in SENSOR_KEYWORDS)
 
     is_followup = False
     ha_session = get_ha_session_dict()
@@ -142,10 +145,10 @@ def extract_ha_entities(query: str, thought_logger: Callable[[str, Any], None]) 
         ]
         has_control_indicator = any(re.search(pat, ql) for pat in control_indicators)
         
-        is_single_sensor = len(ql.split()) == 1 and ql.strip("?.,!") in sensor_keywords
+        is_single_sensor = len(ql.split()) == 1 and ql.strip("?.,!") in SENSOR_KEYWORDS
         
         transitions = [r"\bwhat\s+about\b", r"\bhow\s+about\b", r"\band\s+the\b", r"\band\b"]
-        has_transition = any(re.search(pat, ql) for pat in transitions) and any(re.search(rf"\b{re.escape(k)}\b", ql) for k in sensor_keywords)
+        has_transition = any(re.search(pat, ql) for pat in transitions) and any(re.search(rf"\b{re.escape(k)}\b", ql) for k in SENSOR_KEYWORDS)
         
         if has_pronoun or has_control_indicator or is_single_sensor or has_transition:
             is_followup = True
@@ -154,9 +157,9 @@ def extract_ha_entities(query: str, thought_logger: Callable[[str, Any], None]) 
         result["ha_action"] = "get_state"
         
         sensor_types = []
-        if "temp" in ql or "temperature" in ql or "warm" in ql or "cold" in ql or "hot" in ql:
+        if any(t in ql for t in ["temp", "temperature", "tempature", "temperatue", "temperatur", "warm", "cold", "hot"]):
             sensor_types.append("temperature")
-        if "humid" in ql or "humidity" in ql or "moisture" in ql:
+        if any(h in ql for h in ["humid", "humidity", "humdity", "humidy", "humidty", "moisture"]):
             sensor_types.append("humidity")
         if any(k in ql for k in ["presence", "motion", "someone", "somebody", "anyone", "anybody", "movement", "occupancy", "occupied"]):
             sensor_types.append("presence")
@@ -169,7 +172,7 @@ def extract_ha_entities(query: str, thought_logger: Callable[[str, Any], None]) 
         ha_area = None
         
         # 1. Match area after sensor keywords
-        kw_pattern = r"\b(?:temperature|temp|humidity|humid|presence|motion|occupancy|movement|someone)\b"
+        kw_pattern = r"\b(?:temperature|temp|tempature|temperatue|temperatur|humidity|humid|humdity|humidy|humidty|presence|motion|occupancy|movement|someone)\b"
         area_after_match = re.search(
             rf"{kw_pattern}(?:\s+(?:and|or)\s+{kw_pattern})?\s*(?:in|at|for|of)?\s*(?:the|my)?\s*([a-zA-Z ]{{2,30}})",
             ql
@@ -193,7 +196,7 @@ def extract_ha_entities(query: str, thought_logger: Callable[[str, Any], None]) 
 
         # 3. Backward match fallback
         if not ha_area:
-            for kw in sensor_keywords:
+            for kw in SENSOR_KEYWORDS:
                 m = re.search(rf"\b([a-zA-Z ]{{2,30}}?)\b{re.escape(kw)}\b", ql)
                 if m:
                     candidate = m.group(1).strip()
@@ -204,8 +207,8 @@ def extract_ha_entities(query: str, thought_logger: Callable[[str, Any], None]) 
 
         if ha_area:
             result["ha_area"] = ha_area
-        elif is_followup and "last_ha_area" in session:
-            result["ha_area"] = session.get("last_ha_area")
+        elif is_followup and "last_ha_area" in ha_session:
+            result["ha_area"] = ha_session.get("last_ha_area")
             thought_logger("Restored conversational area from session", result["ha_area"])
             
         return result
