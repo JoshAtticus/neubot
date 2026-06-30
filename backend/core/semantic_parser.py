@@ -96,6 +96,8 @@ class SemanticParser:
             "calc": self._calculator_tool,
             "homeassistant": self._home_assistant_tool,
             "fun": self._fun_tool,
+            "personal": self._personal_tool,
+            "chitchat": self._chitchat_tool,
         }
         
         self.entity_types = {
@@ -116,6 +118,13 @@ class SemanticParser:
     
     def _extract_query_type(self, tokens: List[str]) -> str:
         self._add_thought("Looking for query indicators", tokens[:3])
+        
+        # Check greeting phrases first (supports multi-word greetings like "good evening")
+        ql = " ".join(tokens).lower()
+        for gp in self.greeting_phrases:
+            if ql.startswith(gp) or f" {gp} " in ql:
+                self._add_thought(f"Matched greeting phrase '{gp}'", "greeting_query")
+                return "greeting_query"
         
         for i in range(min(3, len(tokens))):
             word = tokens[i].lower().strip(".,?!")
@@ -147,6 +156,39 @@ class SemanticParser:
             if is_home_assistant_query(lowered):
                 found_tools.add("homeassistant")
                 self._add_thought("Inferred Home Assistant tool from verbs/domains", None)
+
+        # Check for fun keywords
+        fun_keywords = ["joke", "jokes", "destruct", "rainbow", "good morning", "good afternoon", "good evening", "good night", "goodnight"]
+        if any(re.search(rf"\b{re.escape(kw)}\b", lowered) for kw in fun_keywords):
+            found_tools.add("fun")
+            self._add_thought("Inferred fun tool from query keyword/phrase", None)
+
+        # Check for personal user identity query keywords
+        personal_patterns = [
+            r"\bmy name\b",
+            r"\bwho am i\b",
+            r"\bwhat is my name\b",
+            r"\bdo you know my name\b",
+            r"\bdo you know who i am\b",
+            r"\bmy email\b",
+            r"\bwhat is my email\b",
+            r"\bam i logged in\b",
+            r"\bmy account\b"
+        ]
+        if any(re.search(pat, lowered) for pat in personal_patterns):
+            found_tools.add("personal")
+            self._add_thought("Inferred personal tool from user identity query", None)
+
+        # Check for chatbot chitchat keywords
+        chitchat_patterns = [
+            r"\b(who are you|your name|what are you called|what is your name)\b",
+            r"\b(i'm neubot, nice to meet you|i'm neubot, nice to meet you!|my name is neubot|i'm neubot|im neubot|neubot is my name)\b",
+            r"\b(how are you|how's it going|how are you doing)\b",
+            r"\b(what can you do|what are your abilities|help me|what tools do you have)\b"
+        ]
+        if any(re.search(pat, lowered) for pat in chitchat_patterns):
+            found_tools.add("chitchat")
+            self._add_thought("Inferred chitchat tool from general query", None)
 
         # Logic to determine if we should fallback to search
         # If we already have specific tools (weather, time, calculator, etc),
@@ -206,6 +248,7 @@ class SemanticParser:
                 entities.update(ha_entities)
                 entities.setdefault("search_query", query)
         
+        entities.setdefault("search_query", query)
         self._add_thought("Extracted entities", entities)
         return entities
     
@@ -624,6 +667,8 @@ class SemanticParser:
             base_text = "Good night! 🌙 Sleep well." if hour >= 18 else "It's a bit early, but have a relaxing evening anyway!" 
         elif "good evening" in q:
             base_text = "Good evening! 🌆" if 16 <= hour <= 23 else "It's not quite evening here, but hello!" 
+        elif "good afternoon" in q:
+            base_text = "Good afternoon! ☀️" if 12 <= hour < 17 else "It's not afternoon right now, but hello!" 
         elif "tell me a joke" in q or q.strip() == "joke" or "another joke" in q:
             base_text = pick_joke()
         elif "self destruct" in q or "self-destruct" in q:
@@ -634,7 +679,7 @@ class SemanticParser:
                 "type": "fun_result",
                 "variant": "self_destruct",
                 "countdown": countdown_seconds,
-                "finalText": "💥 BOOM! (All systems nominal — that was just for fun.)"
+                "finalText": "💥 BOOM!"
             })
         elif "rainbow" in q and ("light" in q or "lights" in q):
             base_text = "Launching rainbow sequence 🌈"
@@ -650,36 +695,56 @@ class SemanticParser:
 
         return base_text, widgets
 
+    def _personal_tool(self, entities: Dict[str, Any]) -> str:
+        from flask_login import current_user
+        if current_user.is_authenticated and hasattr(current_user, 'name') and current_user.name:
+            response = f"Your name is {current_user.name}."
+            if hasattr(current_user, 'email') and current_user.email:
+                response += f" You are logged in with the email {current_user.email}."
+            self._add_thought("Answered personal query about user identity", response)
+            return response
+        else:
+            response = "I don't know your name yet. Please sign in so I can get to know you!"
+            self._add_thought("Personal query failed - user not authenticated", response)
+            return response
+
+    def _chitchat_tool(self, entities: Dict[str, Any]) -> str:
+        raw_query = entities.get("search_query") or ""
+        ql = raw_query.lower()
+        
+        bot_responses = {
+            r"\b(who are you|your name|what are you called|what is your name)\b": [
+                "I'm neubot, nice to meet you!",
+                "I'm neubot, what's your name?",
+                "People call me neubot!"
+            ],
+            r"\b(i'm neubot, nice to meet you|i'm neubot, nice to meet you!|my name is neubot|i'm neubot|im neubot|neubot is my name)\b": [
+                "Wow, really? Me too!",
+                "Are you sure? I thought I was neubot!",
+                "What a coincidence, that's my name too!",
+                "That line sounds familiar!"
+            ],
+            r"\b(how are you|how's it going|how are you doing)\b": [
+                "I'm doing great, thank you! How can I help you today?",
+                "Doing fantastic! How are you?",
+                "All systems nominal and ready to help!"
+            ],
+            r"\b(what can you do|what are your abilities|help me|what tools do you have)\b": [
+                "I can check the weather, tell you the time, control your smart home, search the web and so much more! What can I help you with?"
+            ]
+        }
+        for pat, resp in bot_responses.items():
+            if re.search(pat, ql):
+                selected_resp = random.choice(resp) if isinstance(resp, list) else resp
+                self._add_thought("Answered chatbot identity/chitchat query", selected_resp)
+                return selected_resp
+        return "I'm here to help you! How can I assist you?"
+
     def process(self, query: str, user_timezone: str = Config.DEFAULT_TIMEZONE) -> Tuple[str, List[Dict[str, Any]], List[Dict[str, Any]], str]:
         self._reset_thoughts()
         self._add_thought("Received query", query)
         
-        # Intercept personal queries about user identity
         ql = query.lower()
-        personal_patterns = [
-            r"\bmy name\b",
-            r"\bwho am i\b",
-            r"\bwhat is my name\b",
-            r"\bdo you know my name\b",
-            r"\bdo you know who i am\b",
-            r"\bmy email\b",
-            r"\bwhat is my email\b",
-            r"\bam i logged in\b",
-            r"\bmy account\b"
-        ]
-        if any(re.search(pat, ql) for pat in personal_patterns):
-            from flask_login import current_user
-            if current_user.is_authenticated and hasattr(current_user, 'name') and current_user.name:
-                response = f"Your name is {current_user.name}."
-                if hasattr(current_user, 'email') and current_user.email:
-                    response += f" You are logged in with the email {current_user.email}."
-                self._add_thought("Answered personal query about user identity", response)
-                return response, [], [t.__dict__ for t in self.thoughts], self._highlight_query(query)
-            else:
-                response = "I don't know your name yet. Please sign in so I can get to know you!"
-                self._add_thought("Personal query failed - user not authenticated", response)
-                return response, [], [t.__dict__ for t in self.thoughts], self._highlight_query(query)
-        
         tokens = re.findall(r"[\w']+|[.,!?;]", query)
         
         query_type = self._extract_query_type(tokens)
