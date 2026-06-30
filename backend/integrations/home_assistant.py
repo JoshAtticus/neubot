@@ -5,7 +5,7 @@ import requests
 import random
 import threading
 from typing import Dict, Any, Optional, Callable, List, Tuple, Set
-from flask import url_for
+from flask import url_for, has_request_context, session
 from flask_login import current_user
 from backend.database import get_db_connection
 from backend.security import encrypt_token, decrypt_token
@@ -49,6 +49,28 @@ def is_home_assistant_query(query: str) -> bool:
     """Detects if a query is intended for Home Assistant."""
     ql = query.lower()
     
+    # Check for conversational follow-up if we have previous HA context in session
+    if has_request_context() and "last_ha_domain" in session:
+        followup_pronouns = [r"\bthem\b", r"\bit\b", r"\bthey\b", r"\bboth\b", r"\ball\b", r"\bthe\s+lights?\b", r"\bthe\s+switches?\b", r"\bthe\s+fans?\b"]
+        has_pronoun = any(re.search(pat, ql) for pat in followup_pronouns)
+        
+        control_indicators = [
+            r"^\s*set\s+(?:them|it|the\s+lights?|both|all)?\s*to\s+",
+            r"^\s*turn\s+(?:on|off)\b",
+            r"^\s*(?:make|change)\s+(?:them|it|the\s+lights?|both|all)?\s+",
+            r"^\s*(?:dim|brighten)\b"
+        ]
+        has_control_indicator = any(re.search(pat, ql) for pat in control_indicators)
+        
+        sensor_keywords = ["temperature", "temp", "humidity", "humid", "presence", "motion", "occupancy", "movement", "someone", "somebody", "anyone", "anybody"]
+        is_single_sensor = len(ql.split()) == 1 and ql.strip("?.,!") in sensor_keywords
+        
+        transitions = [r"\bwhat\s+about\b", r"\bhow\s+about\b", r"\band\s+the\b", r"\band\b"]
+        has_transition = any(re.search(pat, ql) for pat in transitions) and any(re.search(rf"\b{re.escape(k)}\b", ql) for k in sensor_keywords)
+        
+        if has_pronoun or has_control_indicator or is_single_sensor or has_transition:
+            return True
+            
     # Check for sensor keywords
     sensor_keywords = ["temperature", "temp", "humidity", "humid", "presence", "motion", "occupancy", "movement", "someone", "somebody", "anyone", "anybody"]
     has_sensor_keyword = any(re.search(rf"\b{re.escape(k)}\b", ql) for k in sensor_keywords)
@@ -88,6 +110,27 @@ def extract_ha_entities(query: str, thought_logger: Callable[[str, Any], None]) 
     sensor_keywords = ["temperature", "temp", "humidity", "humid", "presence", "motion", "occupancy", "movement", "someone", "somebody", "anyone", "anybody"]
     has_sensor_keyword = any(re.search(rf"\b{re.escape(k)}\b", ql) for k in sensor_keywords)
 
+    is_followup = False
+    if has_request_context() and "last_ha_domain" in session:
+        followup_pronouns = [r"\bthem\b", r"\bit\b", r"\bthey\b", r"\bboth\b", r"\ball\b", r"\bthe\s+lights?\b", r"\bthe\s+switches?\b", r"\bthe\s+fans?\b"]
+        has_pronoun = any(re.search(pat, ql) for pat in followup_pronouns)
+        
+        control_indicators = [
+            r"^\s*set\s+(?:them|it|the\s+lights?|both|all)?\s*to\s+",
+            r"^\s*turn\s+(?:on|off)\b",
+            r"^\s*(?:make|change)\s+(?:them|it|the\s+lights?|both|all)?\s+",
+            r"^\s*(?:dim|brighten)\b"
+        ]
+        has_control_indicator = any(re.search(pat, ql) for pat in control_indicators)
+        
+        is_single_sensor = len(ql.split()) == 1 and ql.strip("?.,!") in sensor_keywords
+        
+        transitions = [r"\bwhat\s+about\b", r"\bhow\s+about\b", r"\band\s+the\b", r"\band\b"]
+        has_transition = any(re.search(pat, ql) for pat in transitions) and any(re.search(rf"\b{re.escape(k)}\b", ql) for k in sensor_keywords)
+        
+        if has_pronoun or has_control_indicator or is_single_sensor or has_transition:
+            is_followup = True
+
     if has_sensor_keyword:
         result["ha_action"] = "get_state"
         
@@ -114,7 +157,7 @@ def extract_ha_entities(query: str, thought_logger: Callable[[str, Any], None]) 
         )
         if area_after_match:
             candidate = area_after_match.group(1).strip()
-            candidate = re.sub(r"\b(please|now|right|today|sensor|sensors|is|are|get|read|show|check|tell|what|whats)\b", "", candidate).strip()
+            candidate = re.sub(r"\b(please|now|right|today|sensor|sensors|is|are|get|read|show|check|tell|what|whats|how|about|and)\b", "", candidate).strip()
             candidate = candidate.rstrip('?').strip()
             if candidate and len(candidate.split()) <= 3:
                 ha_area = candidate
@@ -124,7 +167,7 @@ def extract_ha_entities(query: str, thought_logger: Callable[[str, Any], None]) 
             area_match = re.search(r"\b(?:in|at|for|of)\s+(?:the|my)?\s*([a-zA-Z ]{2,30})", ql)
             if area_match:
                 candidate = area_match.group(1).strip()
-                candidate = re.sub(r"\b(please|now|right|today|sensor|sensors)\b", "", candidate).strip()
+                candidate = re.sub(r"\b(please|now|right|today|sensor|sensors|how|about|and)\b", "", candidate).strip()
                 candidate = candidate.rstrip('?').strip()
                 if candidate and len(candidate.split()) <= 3:
                     ha_area = candidate
@@ -135,13 +178,16 @@ def extract_ha_entities(query: str, thought_logger: Callable[[str, Any], None]) 
                 m = re.search(rf"\b([a-zA-Z ]{{2,30}}?)\b{re.escape(kw)}\b", ql)
                 if m:
                     candidate = m.group(1).strip()
-                    candidate = re.sub(r"\b(turn|switch|set|activate|run|start|stop|on|off|the|my|a|to|what|whats|is|are|check|get|read)\b", "", candidate).strip()
+                    candidate = re.sub(r"\b(turn|switch|set|activate|run|start|stop|on|off|the|my|a|to|what|whats|is|are|check|get|read|how|about|and)\b", "", candidate).strip()
                     if candidate and len(candidate.split()) <= 3:
                         ha_area = candidate
                         break
 
         if ha_area:
             result["ha_area"] = ha_area
+        elif is_followup and "last_ha_area" in session:
+            result["ha_area"] = session.get("last_ha_area")
+            thought_logger("Restored conversational area from session", result["ha_area"])
             
         return result
 
@@ -181,8 +227,9 @@ def extract_ha_entities(query: str, thought_logger: Callable[[str, Any], None]) 
         result["ha_domain"] = domain
 
     ha_area = None
-    if domain:
-        m = re.search(rf"\b([a-zA-Z ]{{2,40}}?)\b(?:{domain}|{domain}s|lamp|lamps|bulb|bulbs)\b", ql)
+    if result.get("ha_domain"):
+        curr_dom = result.get("ha_domain")
+        m = re.search(rf"\b([a-zA-Z ]{{2,40}}?)\b(?:{curr_dom}|{curr_dom}s|lamp|lamps|bulb|bulbs)\b", ql)
         if m:
             candidate = m.group(1).strip()
             candidate = re.sub(r"\b(turn|switch|set|activate|run|start|stop|on|off|the|my|a|to)\b", "", candidate).strip()
@@ -190,7 +237,23 @@ def extract_ha_entities(query: str, thought_logger: Callable[[str, Any], None]) 
                 ha_area = candidate
     if ha_area:
         result["ha_area"] = ha_area
-        
+
+    # Apply follow-up fallback ONLY for fields that were NOT extracted!
+    if is_followup:
+        if not result.get("ha_domain") and session.get("last_ha_domain"):
+            result["ha_domain"] = session.get("last_ha_domain")
+            thought_logger("Restored conversational domain from session", result["ha_domain"])
+        if not result.get("ha_area") and session.get("last_ha_area"):
+            result["ha_area"] = session.get("last_ha_area")
+            thought_logger("Restored conversational area from session", result["ha_area"])
+        if session.get("last_ha_entity_ids") and not result.get("ha_area"):
+            # Only restore entity IDs if they didn't explicitly request another area/device
+            result["last_ha_entity_ids"] = session.get("last_ha_entity_ids")
+            thought_logger("Restored conversational entity IDs from session", result["last_ha_entity_ids"])
+        if session.get("last_ha_sensor_types") and has_sensor_keyword and not result.get("ha_sensor_types"):
+            result["ha_sensor_types"] = session.get("last_ha_sensor_types")
+            result["ha_sensor_type"] = session.get("last_ha_sensor_types")[0]
+            
     return result
 
 def format_ha_summary(action: str, domain: str, results: List[Dict[str, Any]]) -> str:
@@ -596,6 +659,11 @@ def execute_ha_tool(entities: Dict[str, Any], thought_logger: Callable[[str, Any
                     'devices': results
                 }
             }
+            if has_request_context():
+                session["last_ha_domain"] = 'sensor' if any(r['entity_id'].startswith('sensor.') for r in results) else 'binary_sensor'
+                session["last_ha_area"] = list(area_readings.keys())[0] if area_readings else area
+                session["last_ha_sensor_types"] = sensor_types
+                session["last_ha_entity_ids"] = [r['entity_id'] for r in results]
             return summary_text, [widget]
 
         # Single sensor matched
@@ -656,6 +724,11 @@ def execute_ha_tool(entities: Dict[str, Any], thought_logger: Callable[[str, Any
                 'devices': results
             }
         }
+        if has_request_context():
+            session["last_ha_domain"] = eid.split('.')[0]
+            session["last_ha_area"] = cleaned_area
+            session["last_ha_sensor_types"] = sensor_types
+            session["last_ha_entity_ids"] = [eid]
         return summary_text, [widget]
 
     color_words_all = ["warm white","cool white","magenta","yellow","purple","orange","white","green","blue","pink","cyan","red"]
@@ -819,6 +892,14 @@ def execute_ha_tool(entities: Dict[str, Any], thought_logger: Callable[[str, Any
                     'applied': { 'restore_in_seconds': 0 }
                 }
             }
+            if has_request_context():
+                all_eids = []
+                for cl in clause_results:
+                    all_eids.extend([e[0] for e in cl['entities']])
+                session["last_ha_domain"] = domain
+                session["last_ha_area"] = area or room
+                session["last_ha_sensor_types"] = sensor_types
+                session["last_ha_entity_ids"] = list(set(all_eids))
             return summary_text, [widget]
 
     target_entity = None
@@ -850,26 +931,41 @@ def execute_ha_tool(entities: Dict[str, Any], thought_logger: Callable[[str, Any
     token_set = set(q_tokens_raw)
     content_tokens = {t for t in q_tokens_raw if t not in generic_words}
     matched_entities: List[Tuple[str,str,str]] = []
-    select_all = ('all' in token_set or 'every' in token_set) and any(w in token_set for w in {'light','lights',domain, domain+'s'})
-    for st in states:
-        eid = st.get('entity_id','')
-        if not eid.startswith(domain + '.'):
-            continue
-        fname = st.get('attributes',{}).get('friendly_name','')
-        fname_l = fname.lower()
-        name_tokens = [t for t in re.findall(r"[a-zA-Z0-9']+", fname_l) if t not in {'the','and','of'}]
-        if select_all:
-            matched_entities.append((eid, fname, st.get('state')))
-            continue
-        if content_tokens and any(nt in content_tokens for nt in name_tokens):
-            matched_entities.append((eid, fname, st.get('state')))
+    
+    last_ha_entity_ids = entities.get('last_ha_entity_ids')
+    if last_ha_entity_ids:
+        for st in states:
+            eid = st.get('entity_id','')
+            if eid in last_ha_entity_ids:
+                fname = st.get('attributes',{}).get('friendly_name','')
+                matched_entities.append((eid, fname, st.get('state')))
+    else:
+        select_all = ('all' in token_set or 'every' in token_set) and any(w in token_set for w in {'light','lights',domain, domain+'s'})
+        for st in states:
+            eid = st.get('entity_id','')
+            if not eid.startswith(domain + '.'):
+                continue
+            fname = st.get('attributes',{}).get('friendly_name','')
+            fname_l = fname.lower()
+            name_tokens = [t for t in re.findall(r"[a-zA-Z0-9']+", fname_l) if t not in {'the','and','of'}]
+            if select_all:
+                matched_entities.append((eid, fname, st.get('state')))
+                continue
+            if content_tokens and any(nt in content_tokens for nt in name_tokens):
+                matched_entities.append((eid, fname, st.get('state')))
 
-    if not matched_entities and target_entity:
-        state_val = next((s.get('state') for s in states if s.get('entity_id')==target_entity), None)
-        matched_entities = [(target_entity, friendly, state_val)]
+        if not matched_entities and target_entity:
+            state_val = next((s.get('state') for s in states if s.get('entity_id')==target_entity), None)
+            matched_entities = [(target_entity, friendly, state_val)]
 
     if not matched_entities:
         return "I couldn't find a matching device.", []
+
+    if has_request_context():
+        session["last_ha_domain"] = domain
+        session["last_ha_area"] = area or room
+        session["last_ha_sensor_types"] = sensor_types
+        session["last_ha_entity_ids"] = [e[0] for e in matched_entities]
 
     if action == 'get_state':
         results = []
