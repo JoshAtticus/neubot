@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@200..900&display=swap');
 
 @font-face {
     font-family: 'Segoe UI';
@@ -1357,6 +1357,11 @@ input:focus+.toggle-slider {
 .joshid-button {
     background: linear-gradient(135deg, #0f1f3d, #1e3a6e, #0f1f3d);
     color: #ffffff;
+}
+
+.joshid-wordmark {
+    font-family: "Unbounded";
+    margin-left: 0.35em;
 }
 
 .google-button {

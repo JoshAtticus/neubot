@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const bannerDismissed = localStorage.getItem('neubot_banner_dismissed') === 'true';
     const welcomeModalSeen = localStorage.getItem('neubot_welcome_seen') === 'true';
-    const whatsNewModalSeen = localStorage.getItem('neubot_whats_new_20260111_seen') === 'true';
+    const whatsNewModalSeen = localStorage.getItem('neubot_whats_new_20260630_seen') === 'true';
 
     if (!welcomeModalSeen) {
         welcomeModal.style.display = 'block';
@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', function () {
             setTimeout(() => {
                 whatsNewModal.style.display = 'none';
             }, 300);
-            localStorage.setItem('neubot_whats_new_20260111_seen', 'true');
+            localStorage.setItem('neubot_whats_new_20260630_seen', 'true');
         });
     }
 
@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', function () {
             setTimeout(() => {
                 whatsNewModal.style.display = 'none';
             }, 300);
-            localStorage.setItem('neubot_whats_new_20260111_seen', 'true');
+            localStorage.setItem('neubot_whats_new_20260630_seen', 'true');
 
             setTimeout(() => {
                 queryInput.focus();
@@ -81,7 +81,7 @@ document.addEventListener('DOMContentLoaded', function () {
             setTimeout(() => {
                 whatsNewModal.style.display = 'none';
             }, 300);
-            localStorage.setItem('neubot_whats_new_20260111_seen', 'true');
+            localStorage.setItem('neubot_whats_new_20260630_seen', 'true');
         }
     });
 
@@ -116,7 +116,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 setTimeout(() => {
                     whatsNewModal.style.display = 'none';
                 }, 300);
-                localStorage.setItem('neubot_whats_new_20260111_seen', 'true');
+                localStorage.setItem('neubot_whats_new_20260630_seen', 'true');
             }
 
             setTimeout(() => {
@@ -290,12 +290,12 @@ document.addEventListener('DOMContentLoaded', function () {
         const stepsCount = thoughts.length;
         const detailsId = 'details-' + Date.now();
         const toggleId = 'toggle-' + Date.now();
-        
+
         const usesPersonalContext = thoughts.some(t => {
             const desc = (t.description || '').toLowerCase();
             return desc.includes('personal') || desc.includes('identity') || desc.includes('user_name') || desc.includes('user context');
         });
-        
+
         const contextLabel = usesPersonalContext ? ' using your personal context' : '';
 
         const messageHTML = `
@@ -494,8 +494,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function renderWidget(widget) {
         // Backend now wraps content in 'data', logic below expects the content directly
-        const content = widget.data || widget; 
-        
+        const content = widget.data || widget;
+
         switch (widget.type) {
             case 'home_assistant':
             case 'ha_result':
@@ -505,25 +505,25 @@ document.addEventListener('DOMContentLoaded', function () {
             case 'weather':
                 return buildWeatherWidget(content);
             default:
-                return null; 
+                return null;
         }
     }
 
     function buildWeatherWidget(data) {
         const wrap = document.createElement('div');
         wrap.className = 'weather-block widget';
-        
+
         // Basic weather display
         const tempC = Math.round(data.temperature.celsius);
         const tempF = Math.round(data.temperature.fahrenheit);
-        
+
         let tempDisplay = '';
         if (userTempUnit === 'f') {
             tempDisplay = `<span class="weather-temp">${tempF}°F</span>`;
         } else {
             tempDisplay = `<span class="weather-temp">${tempC}°C</span>`;
         }
-        
+
         wrap.innerHTML = `
             <div class="weather-header">
                 <div class="weather-location">${data.location}</div>
@@ -544,7 +544,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const devs = data.devices || [];
         const action = data.action || '';
         const applied = data.applied || {};
-        
+
         const svgIconMap = {
             light: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`,
             switch: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`,
@@ -604,11 +604,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 const unit = (d.attributes && d.attributes.unit_of_measurement) || '';
                 let valueDisplay = stateVal + unit;
                 const stateLower = String(stateVal).toLowerCase();
-                
+
                 if (stateLower === 'unavailable' || stateLower === 'unknown') {
                     valueDisplay = `<span style="color:#ff5a67; font-weight:500; text-transform:capitalize;">${stateLower}</span>`;
                 }
-                
+
                 if (devDomain === 'binary_sensor') {
                     typeLabel = 'Presence';
                     cardIcon = presenceSvg;
@@ -639,9 +639,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 const isOn = stateVal === 'on';
                 const statusText = isOn ? 'On' : 'Off';
                 const statusColor = isOn ? '#3ecf8e' : '#889099';
-                
+
                 const isChangingColor = !!(applied.color_name || devs.some(device => device.applied_color));
-                
+
                 let colorPickerHtml = '';
                 if (devDomain === 'light' && isChangingColor) {
                     let currentColor = '#ffffff';
@@ -649,9 +649,9 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (d.applied_color.startsWith('#')) {
                             currentColor = d.applied_color;
                         } else {
-                            const nameToHex = { 
-                                red: '#ff0000', green: '#00ff00', blue: '#0000ff', 
-                                yellow: '#ffff00', purple: '#800080', orange: '#ffa500', 
+                            const nameToHex = {
+                                red: '#ff0000', green: '#00ff00', blue: '#0000ff',
+                                yellow: '#ffff00', purple: '#800080', orange: '#ffa500',
                                 pink: '#ffc0cb', white: '#ffffff', cyan: '#00ffff',
                                 magenta: '#ff00ff'
                             };
@@ -664,9 +664,9 @@ document.addEventListener('DOMContentLoaded', function () {
                                 const hex = parseInt(x).toString(16);
                                 return hex.length === 1 ? '0' + hex : hex;
                             }).join('');
-                        } catch (e) {}
+                        } catch (e) { }
                     }
-                    
+
                     colorPickerHtml = `
                         <div class="ha-color-selector" style="display: flex; align-items: center; margin-top: 10px;">
                             <span style="font-size: 13px; color: #889099; margin-right: 8px;">Color:</span>
@@ -710,17 +710,17 @@ document.addEventListener('DOMContentLoaded', function () {
             // Attach event listeners
             const toggleInput = card.querySelector('.ha-device-toggle');
             if (toggleInput) {
-                toggleInput.addEventListener('change', async function() {
+                toggleInput.addEventListener('change', async function () {
                     const checked = this.checked;
                     const entityId = this.dataset.entityId;
                     const act = checked ? 'turn_on' : 'turn_off';
                     const statusTextEl = card.querySelector('.ha-device-status-text');
-                    
+
                     if (statusTextEl) {
                         statusTextEl.textContent = checked ? 'On' : 'Off';
                         statusTextEl.style.color = checked ? '#3ecf8e' : '#889099';
                     }
-                    
+
                     try {
                         const res = await fetch('/api/integrations/home-assistant/control', {
                             method: 'POST',
@@ -749,15 +749,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const colorInput = card.querySelector('.ha-color-input');
             if (colorInput) {
-                colorInput.addEventListener('change', async function() {
+                colorInput.addEventListener('change', async function () {
                     const newColor = this.value;
                     const entityId = this.dataset.entityId;
                     const triggerEl = this.parentElement;
-                    
+
                     if (triggerEl) {
                         triggerEl.style.backgroundColor = newColor;
                     }
-                    
+
                     try {
                         const res = await fetch('/api/integrations/home-assistant/control', {
                             method: 'POST',
@@ -804,11 +804,11 @@ document.addEventListener('DOMContentLoaded', function () {
             wrap.innerHTML = `<div class="fun-rainbow"><div class="fun-title">Rainbow Lights</div><div class="sequence"></div><div class="done">${data.text || 'Done!'}</div></div>`;
             const seq = wrap.querySelector('.sequence');
             const colors = data.sequence || [];
-            colors.forEach((c,i) => {
+            colors.forEach((c, i) => {
                 const span = document.createElement('span');
                 span.className = 'fun-color';
                 span.style.background = c; span.title = c;
-                span.style.setProperty('--delay', i*0.15 + 's');
+                span.style.setProperty('--delay', i * 0.15 + 's');
                 seq.appendChild(span);
             });
         } else {
@@ -925,18 +925,18 @@ document.addEventListener('DOMContentLoaded', function () {
             if (isUserAuthenticated && userInfo.user && userInfo.user.temp_unit) {
                 userTempUnit = userInfo.user.temp_unit;
             } else {
-                 const stored = localStorage.getItem('neubot_temp_unit');
-                 if (stored) {
-                     userTempUnit = stored;
-                 } else {
-                     const lang = navigator.language || 'en-US';
-                     userTempUnit = (lang === 'en-US') ? 'f' : 'c';
-                 }
+                const stored = localStorage.getItem('neubot_temp_unit');
+                if (stored) {
+                    userTempUnit = stored;
+                } else {
+                    const lang = navigator.language || 'en-US';
+                    userTempUnit = (lang === 'en-US') ? 'f' : 'c';
+                }
             }
 
             const tempToggle = document.getElementById('temp-unit-toggle');
             if (tempToggle) {
-                 tempToggle.checked = (userTempUnit === 'f');
+                tempToggle.checked = (userTempUnit === 'f');
             }
 
             if (userProfileImg) {
@@ -980,7 +980,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 userName.textContent = userInfo.user.name;
                 userEmail.textContent = userInfo.user.email;
-                userProvider.textContent = `Signed in with ${userInfo.user.provider.charAt(0).toUpperCase() + userInfo.user.provider.slice(1)}`;
+                let providerName = userInfo.user.provider || '';
+                if (providerName.toLowerCase() === 'joshatticusid') {
+                    providerName = 'JoshAtticusID';
+                } else if (providerName) {
+                    providerName = providerName.charAt(0).toUpperCase() + providerName.slice(1);
+                }
+                userProvider.textContent = `Signed in with ${providerName}`;
 
                 if (userInfo.user.profile_pic) {
                     userAvatar.src = userInfo.user.profile_pic;
@@ -1033,19 +1039,19 @@ document.addEventListener('DOMContentLoaded', function () {
         tempUnitToggle.addEventListener('change', async function () {
             const unit = this.checked ? 'f' : 'c';
             userTempUnit = unit;
-            
+
             // Save locally immediately for visual consistency
             localStorage.setItem('neubot_temp_unit', unit);
 
             // If authenticated, sync with server
             if (isUserAuthenticated) {
-                 try {
-                     await fetch('/api/show-settings', {
-                         method: 'POST',
-                         headers: { 'Content-Type': 'application/json' },
-                         body: JSON.stringify({ temp_unit: unit })
-                     });
-                 } catch(e) { console.error('Error saving temp unit', e); }
+                try {
+                    await fetch('/api/show-settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ temp_unit: unit })
+                    });
+                } catch (e) { console.error('Error saving temp unit', e); }
             }
         });
     }
