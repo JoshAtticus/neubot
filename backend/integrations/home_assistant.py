@@ -10,6 +10,23 @@ from flask_login import current_user
 from backend.database import get_db_connection
 from backend.security import encrypt_token, decrypt_token
 from backend.config import Config
+from backend.utils import get_request_user_id, get_client_ip
+
+# Global thread-safe session dictionary for conversational awareness
+ha_sessions = {}
+ha_sessions_lock = threading.Lock()
+
+def get_ha_session_dict():
+    if not has_request_context():
+        return {}
+    user_id = get_request_user_id()
+    if not user_id:
+        user_id = get_client_ip()
+    
+    with ha_sessions_lock:
+        if user_id not in ha_sessions:
+            ha_sessions[user_id] = {}
+        return ha_sessions[user_id]
 
 HA_ACTION_VERBS = {
     "turn on": "turn_on",
@@ -50,7 +67,8 @@ def is_home_assistant_query(query: str) -> bool:
     ql = query.lower()
     
     # Check for conversational follow-up if we have previous HA context in session
-    if has_request_context() and "last_ha_domain" in session:
+    ha_session = get_ha_session_dict()
+    if has_request_context() and "last_ha_domain" in ha_session:
         followup_pronouns = [r"\bthem\b", r"\bit\b", r"\bthey\b", r"\bboth\b", r"\ball\b", r"\bthe\s+lights?\b", r"\bthe\s+switches?\b", r"\bthe\s+fans?\b"]
         has_pronoun = any(re.search(pat, ql) for pat in followup_pronouns)
         
