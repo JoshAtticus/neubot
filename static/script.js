@@ -545,7 +545,6 @@ document.addEventListener('DOMContentLoaded', function () {
         const action = data.action || '';
         const applied = data.applied || {};
         
-        // SVG symbols mapping to completely replace emojis
         const svgIconMap = {
             light: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`,
             switch: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`,
@@ -557,165 +556,228 @@ document.addEventListener('DOMContentLoaded', function () {
             binary_sensor: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`
         };
 
-        const ico = svgIconMap[domain] || `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>`;
+        const container = document.createElement('div');
+        container.className = 'ha-device-cards-container';
+        container.style.display = 'flex';
+        container.style.flexWrap = 'wrap';
+        container.style.gap = '12px';
+        container.style.marginTop = '12px';
+        container.style.width = '100%';
 
-        if (domain === 'sensor' || domain === 'binary_sensor') {
-            const container = document.createElement('div');
-            container.className = 'ha-sensor-cards-container';
-            container.style.display = 'flex';
-            container.style.flexWrap = 'wrap';
-            container.style.gap = '12px';
-            container.style.marginTop = '12px';
-            
-            devs.forEach(d => {
-                const card = document.createElement('div');
-                card.className = 'weather-block widget';
-                card.style.margin = '0';
-                card.style.padding = '12px 16px';
-                card.style.minWidth = '220px';
-                card.style.flex = '1 1 220px';
-                
-                let stateVal = d.state_current || d.state_before || 'unknown';
+        devs.forEach(d => {
+            const card = document.createElement('div');
+            card.className = 'weather-block widget';
+            card.style.margin = '0';
+            card.style.padding = '12px 16px';
+            card.style.minWidth = '220px';
+            card.style.flex = '1 1 220px';
+            card.style.position = 'relative';
+            card.style.display = 'flex';
+            card.style.flexDirection = 'column';
+            card.style.justifyContent = 'space-between';
+
+            // Find current state and individual device domain
+            const devDomain = d.entity_id.split('.')[0];
+            let stateVal = d.state_current || d.state_before || 'unknown';
+            const reqAction = d.requested_action || action;
+            if (reqAction === 'turn_on') {
+                stateVal = d.success ? 'on' : (d.state_before || 'off');
+            } else if (reqAction === 'turn_off') {
+                stateVal = d.success ? 'off' : (d.state_before || 'on');
+            }
+
+            let cleanArea = d.name || d.entity_id;
+            for (const suffix of [" Temperature", " temperature", " Temp", " temp", " Humidity", " humidity", " Presence", " presence", " Motion", " motion", " Occupancy", " occupancy", " Sensor", " sensor"]) {
+                cleanArea = cleanArea.replace(suffix, "");
+            }
+
+            const thermometerSvg = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path></svg>`;
+            const dropletSvg = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>`;
+            const presenceSvg = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+
+            let cardIcon = svgIconMap[devDomain] || `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>`;
+            let typeLabel = devDomain.charAt(0).toUpperCase() + devDomain.slice(1);
+
+            let mainContentHtml = '';
+
+            if (devDomain === 'sensor' || devDomain === 'binary_sensor') {
                 const unit = (d.attributes && d.attributes.unit_of_measurement) || '';
-                
-                let cleanArea = d.name || d.entity_id;
-                for (const suffix of [" Temperature", " temperature", " Temp", " temp", " Humidity", " humidity", " Presence", " presence", " Motion", " motion", " Occupancy", " occupancy", " Sensor", " sensor"]) {
-                    cleanArea = cleanArea.replace(suffix, "");
-                }
-                
-                let sensorType = 'Sensor';
                 let valueDisplay = stateVal + unit;
-                
-                const thermometerSvg = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path></svg>`;
-                const dropletSvg = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>`;
-                const presenceSvg = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="ha-svg-icon" style="display:inline-block; vertical-align:middle; margin-right:6px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
-
-                let cardIcon = svgIconMap[domain] || '';
-                
                 const stateLower = String(stateVal).toLowerCase();
+                
                 if (stateLower === 'unavailable' || stateLower === 'unknown') {
                     valueDisplay = `<span style="color:#ff5a67; font-weight:500; text-transform:capitalize;">${stateLower}</span>`;
                 }
                 
-                if (domain === 'binary_sensor') {
-                    sensorType = 'Presence';
+                if (devDomain === 'binary_sensor') {
+                    typeLabel = 'Presence';
                     cardIcon = presenceSvg;
                     if (stateVal === 'on') {
                         valueDisplay = `<span style="color:#3ecf8e; font-weight:600;">Active</span>`;
                     } else if (stateVal === 'off') {
                         valueDisplay = `<span style="color:#889099; font-weight:600;">Clear</span>`;
-                    } else {
-                        valueDisplay = stateVal;
                     }
                 } else {
                     const devClass = d.attributes && d.attributes.device_class;
                     if (devClass === 'temperature' || d.entity_id.includes('temp') || unit.includes('°')) {
-                        sensorType = 'Temperature';
+                        typeLabel = 'Temperature';
                         cardIcon = thermometerSvg;
                     } else if (devClass === 'humidity' || d.entity_id.includes('humid') || unit === '%') {
-                        sensorType = 'Humidity';
+                        typeLabel = 'Humidity';
                         cardIcon = dropletSvg;
                     } else {
                         cardIcon = thermometerSvg;
                     }
                 }
-                
-                card.innerHTML = `
-                    <div class="weather-header" style="border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 6px; margin-bottom: 8px;">
-                        <div class="weather-location" style="display:flex; align-items:center; font-size:15px; font-weight:600; color:#fff;">
-                            ${cardIcon} ${cleanArea}
-                        </div>
-                        <div class="weather-condition" style="font-size:12px; color:#889099; text-transform: capitalize;">
-                            ${sensorType}
-                        </div>
-                    </div>
+
+                mainContentHtml = `
                     <div class="weather-main" style="font-size:28px; font-weight:300; color:#fff; margin: 4px 0 0 0;">
                         ${valueDisplay}
                     </div>
                 `;
-                container.appendChild(card);
-            });
-            return container;
-        }
+            } else {
+                const isOn = stateVal === 'on';
+                const statusText = isOn ? 'On' : 'Off';
+                const statusColor = isOn ? '#3ecf8e' : '#889099';
+                
+                const isChangingColor = !!(applied.color_name || devs.some(device => device.applied_color));
+                
+                let colorPickerHtml = '';
+                if (devDomain === 'light' && isChangingColor) {
+                    let currentColor = '#ffffff';
+                    if (d.applied_color) {
+                        if (d.applied_color.startsWith('#')) {
+                            currentColor = d.applied_color;
+                        } else {
+                            const nameToHex = { 
+                                red: '#ff0000', green: '#00ff00', blue: '#0000ff', 
+                                yellow: '#ffff00', purple: '#800080', orange: '#ffa500', 
+                                pink: '#ffc0cb', white: '#ffffff', cyan: '#00ffff',
+                                magenta: '#ff00ff'
+                            };
+                            currentColor = nameToHex[d.applied_color.toLowerCase()] || '#ffffff';
+                        }
+                    } else if (d.attributes && d.attributes.rgb_color) {
+                        try {
+                            const rgb = d.attributes.rgb_color;
+                            currentColor = '#' + rgb.map(x => {
+                                const hex = parseInt(x).toString(16);
+                                return hex.length === 1 ? '0' + hex : hex;
+                            }).join('');
+                        } catch (e) {}
+                    }
+                    
+                    colorPickerHtml = `
+                        <div class="ha-color-selector" style="display: flex; align-items: center; margin-top: 10px;">
+                            <span style="font-size: 13px; color: #889099; margin-right: 8px;">Color:</span>
+                            <div class="color-picker-trigger" style="width: 20px; height: 20px; border-radius: 50%; border: 2px solid #fff; background-color: ${currentColor}; cursor: pointer; position: relative; box-shadow: 0 0 4px rgba(0,0,0,0.5);" title="Pick Color">
+                                <input type="color" class="ha-color-input" value="${currentColor}" data-entity-id="${d.entity_id}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;">
+                            </div>
+                        </div>
+                    `;
+                }
 
-        const wrap = document.createElement('div');
-        wrap.className = 'ha-block widget';
-        const header = document.createElement('div');
-        header.className = 'ha-block-header';
-        let stateWord = '';
-        if (action === 'turn_on') stateWord = 'on';
-        else if (action === 'turn_off') stateWord = 'off';
-        let appliedBits = [];
-        if (applied.color_name) appliedBits.push(applied.color_name);
-        if (applied.brightness_pct) appliedBits.push(applied.brightness_pct + '%');
-        const appliedText = appliedBits.length ? ' • ' + appliedBits.join(' @ ').replace(' @ %', '%') : '';
-        header.innerHTML = `${ico}<span class="ha-h-text" style="vertical-align:middle; margin-left:6px;">${devs.length} ${domain}${devs.length === 1 ? '' : 's'} ${stateWord}${appliedText}</span>`;
-        wrap.appendChild(header);
-        const list = document.createElement('ul');
-        list.className = 'ha-dev-list';
-        if (!devs.length) {
-            const li = document.createElement('li');
-            li.className = 'empty';
-            li.textContent = 'No matching devices';
-            list.appendChild(li);
-        } else {
-            devs.forEach(d => {
-                const li = document.createElement('li');
-                const success = !!d.success;
-                
-                // Get the state after action execution
-                let stateVal;
-                const reqAction = d.requested_action || action;
-                if (reqAction === 'turn_on') {
-                    stateVal = success ? 'on' : (d.state_before || 'off');
-                } else if (reqAction === 'turn_off') {
-                    stateVal = success ? 'off' : (d.state_before || 'on');
-                } else {
-                    stateVal = d.state_current || d.state_before || 'unknown';
-                }
-                
-                let stateLabel = '';
-                let stateClass = '';
-                let showDot = true;
-                
-                if (!success) {
-                    stateLabel = 'error';
-                    stateClass = 'err';
-                } else if (stateVal === 'on') {
-                    stateLabel = 'on';
-                    stateClass = 'on';
-                } else if (stateVal === 'off') {
-                    stateLabel = 'off';
-                    stateClass = 'off';
-                } else {
-                    // For numeric sensors (like temperature, humidity, etc.)
-                    const unit = (d.attributes && d.attributes.unit_of_measurement) || '';
-                    stateLabel = stateVal + unit;
-                    stateClass = 'off'; // neutral grey style
-                    showDot = false; // omit the dot for numeric values
-                }
-                
-                const dotHtml = showDot ? '<span class="dot"></span>' : '';
-                let extra = '';
-                if (d.applied_color) {
-                    extra += `<span class="ha-mini-chip" style="--ha-chip-color:${d.applied_color}" title="${d.applied_color}"></span>`;
-                }
-                if (typeof d.applied_brightness_pct === 'number') {
-                    extra += `<span class="ha-mini-br">${d.applied_brightness_pct}%</span>`;
-                }
-                li.innerHTML = `<span class="nm" title="${d.entity_id}">${d.name || d.entity_id}</span><span class="st ${stateClass}">${dotHtml}${stateLabel}</span>${extra}`;
-                list.appendChild(li);
-            });
-        }
-        wrap.appendChild(list);
-        if (applied.color_name) {
-            const colorChip = document.createElement('span');
-            colorChip.className = 'ha-color-chip';
-            colorChip.style.setProperty('--ha-chip-color', applied.color_name);
-            colorChip.title = applied.color_name + (applied.brightness_pct ? ` @ ${applied.brightness_pct}%` : '');
-            header.appendChild(colorChip);
-        }
-        return wrap;
+                const toggleHtml = isChangingColor ? '' : `
+                    <label class="toggle-switch">
+                        <input type="checkbox" class="ha-device-toggle" data-entity-id="${d.entity_id}" ${isOn ? 'checked' : ''}>
+                        <span class="toggle-slider"></span>
+                    </label>
+                `;
+
+                mainContentHtml = `
+                    <div style="display: flex; flex-direction: column; width: 100%;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 6px; width: 100%;">
+                            <span class="ha-device-status-text" style="font-size: 20px; font-weight: 500; color: ${statusColor};">${statusText}</span>
+                            ${toggleHtml}
+                        </div>
+                        ${colorPickerHtml}
+                    </div>
+                `;
+            }
+
+            card.innerHTML = `
+                <div class="weather-header" style="border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 6px; margin-bottom: 8px; width: 100%;">
+                    <div class="weather-location" style="display:flex; align-items:center; font-size:15px; font-weight:600; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                        ${cardIcon} ${cleanArea}
+                    </div>
+                    <div class="weather-condition" style="font-size:12px; color:#889099; text-transform: capitalize;">
+                        ${typeLabel}
+                    </div>
+                </div>
+                ${mainContentHtml}
+            `;
+
+            // Attach event listeners
+            const toggleInput = card.querySelector('.ha-device-toggle');
+            if (toggleInput) {
+                toggleInput.addEventListener('change', async function() {
+                    const checked = this.checked;
+                    const entityId = this.dataset.entityId;
+                    const act = checked ? 'turn_on' : 'turn_off';
+                    const statusTextEl = card.querySelector('.ha-device-status-text');
+                    
+                    if (statusTextEl) {
+                        statusTextEl.textContent = checked ? 'On' : 'Off';
+                        statusTextEl.style.color = checked ? '#3ecf8e' : '#889099';
+                    }
+                    
+                    try {
+                        const res = await fetch('/api/integrations/home-assistant/control', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ entity_id: entityId, action: act })
+                        });
+                        const resData = await res.json();
+                        if (!resData.success) {
+                            console.error("Control failed:", resData.error);
+                            this.checked = !checked;
+                            if (statusTextEl) {
+                                statusTextEl.textContent = !checked ? 'On' : 'Off';
+                                statusTextEl.style.color = !checked ? '#3ecf8e' : '#889099';
+                            }
+                        }
+                    } catch (e) {
+                        console.error(e);
+                        this.checked = !checked;
+                        if (statusTextEl) {
+                            statusTextEl.textContent = !checked ? 'On' : 'Off';
+                            statusTextEl.style.color = !checked ? '#3ecf8e' : '#889099';
+                        }
+                    }
+                });
+            }
+
+            const colorInput = card.querySelector('.ha-color-input');
+            if (colorInput) {
+                colorInput.addEventListener('change', async function() {
+                    const newColor = this.value;
+                    const entityId = this.dataset.entityId;
+                    const triggerEl = this.parentElement;
+                    
+                    if (triggerEl) {
+                        triggerEl.style.backgroundColor = newColor;
+                    }
+                    
+                    try {
+                        const res = await fetch('/api/integrations/home-assistant/control', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ entity_id: entityId, action: 'turn_on', color: newColor })
+                        });
+                        const resData = await res.json();
+                        if (!resData.success) {
+                            console.error("Color control failed:", resData.error);
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                });
+            }
+
+            container.appendChild(card);
+        });
+
+        return container;
     }
 
     function buildFunResultWidget(data) {

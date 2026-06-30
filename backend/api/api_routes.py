@@ -241,3 +241,81 @@ def ha_unlink():
         c.execute('DELETE FROM home_assistant_links WHERE user_id = ?', (current_user.id,))
         conn.commit()
     return jsonify({"success": True, "message": "Home Assistant disconnected"})
+
+@api_bp.route('/integrations/home-assistant/control', methods=['POST'])
+@login_required
+def ha_control():
+    data = request.json or {}
+    entity_id = data.get('entity_id')
+    action = data.get('action')
+    color = data.get('color') # hex string like '#ff0000'
+    brightness = data.get('brightness')
+    
+    if not entity_id or not action:
+        return jsonify({"success": False, "error": "Missing entity_id or action"}), 400
+        
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT base_url, access_token, refresh_token, expires_at FROM home_assistant_links WHERE user_id = ?', (current_user.id,))
+        row = cursor.fetchone()
+        
+    if not row:
+        return jsonify({"success": False, "error": "Home Assistant not connected"}), 401
+        
+    base_url = row['base_url']
+    access_token = decrypt_token(row['access_token'])
+    
+    current_time = int(time.time())
+    if row['expires_at'] and current_time >= row['expires_at'] - 60 and row['refresh_token']:
+        try:
+            refresh_token = decrypt_token(row['refresh_token'])
+            refresh_url = f"{base_url}/auth/token"
+            payload = {
+                'grant_type': 'refresh_token',
+                'refresh_token': refresh_token,
+                'client_id': url_for('api.ha_callback', _external=True)
+            }
+            ref_res = requests.post(refresh_url, data=payload, timeout=10)
+            if ref_res.status_code == 200:
+                ref_data = ref_res.json()
+                access_token = ref_data.get('access_token')
+                new_refresh_token = ref_data.get('refresh_token', refresh_token)
+                expires_in = ref_data.get('expires_in', 1800)
+                expires_at = int(time.time()) + int(expires_in)
+                with get_db_connection() as conn_update:
+                    c_up = conn_update.cursor()
+                    c_up.execute('UPDATE home_assistant_links SET access_token = ?, refresh_token = ?, expires_at = ? WHERE user_id = ?',
+                                 (encrypt_token(access_token), encrypt_token(new_refresh_token), expires_at, current_user.id))
+                    conn_update.commit()
+        except Exception:
+            pass
+
+    domain = entity_id.split('.')[0]
+    svc_data = {'entity_id': entity_id}
+    
+    if domain == 'light' and action == 'turn_on':
+        if brightness is not None:
+            svc_data['brightness_pct'] = brightness
+        if color:
+            if isinstance(color, str) and color.startswith('#'):
+                hex_color = color.lstrip('#')
+                rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+                svc_data['rgb_color'] = rgb
+            elif isinstance(color, (list, tuple)):
+                svc_data['rgb_color'] = color
+            else:
+                svc_data['color_name'] = color
+                
+    try:
+        url = f"{base_url}/api/services/{domain}/{action}"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+        res = requests.post(url, headers=headers, json=svc_data, timeout=10)
+        if res.status_code in (200, 201):
+            return jsonify({"success": True})
+        else:
+            return jsonify({"success": False, "error": f"HA service returned {res.status_code}"}), 502
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500

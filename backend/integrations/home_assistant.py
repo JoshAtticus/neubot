@@ -413,7 +413,8 @@ def execute_ha_tool(entities: Dict[str, Any], thought_logger: Callable[[str, Any
                 elif s_type == 'presence':
                     presence_keywords = ['motion', 'presence', 'occupancy', 'movement', 'occupant', 'pir', 'occupy', 'someone', 'somebody', 'person']
                     if any(kw in fname_l or kw in eid_l for kw in presence_keywords) or device_class in ('motion', 'occupancy', 'presence', 'moving'):
-                        is_type_match = True
+                        if not any(ex in fname_l or ex in eid_l for ex in ['rssi', 'lqi', 'battery', 'signal', 'voltage', 'power', 'linkquality', 'identify']):
+                            is_type_match = True
                         
                 if not is_type_match:
                     continue

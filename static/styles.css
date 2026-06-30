@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@900&display=swap');
+
 @font-face {
     font-family: 'Segoe UI';
     src: url('/fonts/Segoe UI.ttf') format('truetype');
@@ -79,7 +81,7 @@ h1 {
     font-weight: 900;
     letter-spacing: 1px;
     text-transform: lowercase;
-    font-family: 'Bernoru UltraExpanded';
+    font-family: "Bernoru UltraExpanded";
 }
 
 .subtitle {
@@ -2422,27 +2424,33 @@ select {
 #welcome-modal .welcome-modal-content {
     display: flex;
     flex-direction: column;
-    height: 80vh; /* Fixed height to allow scrolling inner area */
+    height: 80vh;
+    /* Fixed height to allow scrolling inner area */
     max-height: 800px;
     position: relative;
-    overflow: hidden; /* Prevent outer scroll */
+    overflow: hidden;
+    /* Prevent outer scroll */
 }
 
 #whats-new-modal .welcome-body,
 #welcome-modal .welcome-body {
     flex: 1;
     overflow-y: auto;
-    padding-bottom: 80px; /* Space for the fixed footer to not cover last item */
+    padding-bottom: 80px;
+    /* Space for the fixed footer to not cover last item */
     -webkit-overflow-scrolling: touch;
-    
+
     /* Hide Scrollbar */
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE/Edge */
+    scrollbar-width: none;
+    /* Firefox */
+    -ms-overflow-style: none;
+    /* IE/Edge */
 }
 
 #whats-new-modal .welcome-body::-webkit-scrollbar,
 #welcome-modal .welcome-body::-webkit-scrollbar {
-    display: none; /* Chrome/Safari/Opera */
+    display: none;
+    /* Chrome/Safari/Opera */
 }
 
 #whats-new-modal .welcome-footer,
@@ -2468,7 +2476,7 @@ select {
     border-radius: 12px;
     padding: 16px 20px;
     margin-top: 12px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
     display: inline-block;
     min-width: 200px;
 }
@@ -2478,7 +2486,7 @@ select {
     justify-content: space-between;
     align-items: baseline;
     margin-bottom: 8px;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     padding-bottom: 8px;
 }
 
