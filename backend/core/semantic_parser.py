@@ -740,7 +740,64 @@ class SemanticParser:
                 return selected_resp
         return "I'm here to help you! How can I assist you?"
 
+    def _should_split_query(self, query: str) -> List[str]:
+        if ' and ' not in query.lower() and ' then ' not in query.lower():
+            return []
+            
+        pattern = r'\s+and\s+then\s+|\s+then\s+|\s+and\s+'
+        segments = re.split(pattern, query, flags=re.IGNORECASE)
+        if len(segments) < 2:
+            return []
+            
+        action_indicators = {
+            "what", "how", "when", "where", "who", "why", "is", "are", "can", "could", "would", "should",
+            "turn", "switch", "set", "dim", "brighten", "open", "close", "activate", "run", "start", "stop",
+            "play", "pause", "tell", "show", "find", "get", "check", "read", "status", "state", "was", "were",
+            "has", "have", "temperature", "temp", "tempature", "temperatue", "temperatur", "humidity", "humid", "humdity", "humidy", "humidty", "presence", "motion"
+        }
+        
+        valid_segments = []
+        for seg in segments:
+            seg = seg.strip()
+            if not seg:
+                continue
+            words = set(re.findall(r"\w+", seg.lower()))
+            if words & action_indicators:
+                valid_segments.append(seg)
+                
+        if len(valid_segments) == len(segments) and len(valid_segments) > 1:
+            return valid_segments
+        return []
+
     def process(self, query: str, user_timezone: str = Config.DEFAULT_TIMEZONE) -> Tuple[str, List[Dict[str, Any]], List[Dict[str, Any]], str]:
+        segments = self._should_split_query(query)
+        if segments:
+            responses = []
+            all_widgets = []
+            all_thoughts = []
+            highlighted_parts = []
+            
+            for seg in segments:
+                if query.rstrip().endswith('?') and not seg.rstrip().endswith('?'):
+                    if seg == segments[-1]:
+                        seg += '?'
+                
+                resp, widgets, thoughts, highlighted = self.process_single(seg, user_timezone)
+                responses.append(resp)
+                all_widgets.extend(widgets)
+                all_thoughts.extend(thoughts)
+                highlighted_parts.append(highlighted)
+                
+            combined_response = " and ".join([r.strip().rstrip('.') for r in responses if r.strip()])
+            if combined_response:
+                combined_response = combined_response[0].upper() + combined_response[1:] + "."
+                
+            combined_highlighted = " <span class=\"conjunction\">and</span> ".join(highlighted_parts)
+            return combined_response, all_widgets, all_thoughts, combined_highlighted
+            
+        return self.process_single(query, user_timezone)
+
+    def process_single(self, query: str, user_timezone: str = Config.DEFAULT_TIMEZONE) -> Tuple[str, List[Dict[str, Any]], List[Dict[str, Any]], str]:
         self._reset_thoughts()
         self._add_thought("Received query", query)
         
